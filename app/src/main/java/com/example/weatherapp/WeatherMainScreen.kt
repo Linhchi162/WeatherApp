@@ -190,6 +190,7 @@ fun WeatherMainScreen(
                         }
 
                         item {
+                            val index = viewModel.getCurrentIndex()
                             Row(
                                 modifier = Modifier
                                     .fillMaxWidth()
@@ -198,9 +199,9 @@ fun WeatherMainScreen(
                                 horizontalArrangement = Arrangement.SpaceBetween,
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
-                                InfoItem(R.drawable.rain_dropp, "${viewModel.precipitationList.firstOrNull()?.toInt() ?: 0}%", Color(0xFF5372DC))
-                                InfoItem(R.drawable.humidity, "${viewModel.humidityList.firstOrNull()?.toInt() ?: 0}%", Color(0xFFD05CA2))
-                                InfoItem(R.drawable.wind_speed, "${viewModel.windSpeedList.firstOrNull()?.toInt() ?: 0}km/h", Color(0xFF3F9CBE))
+                                InfoItem(R.drawable.rain_dropp, "${viewModel.precipitationList.getOrNull(index)?.toInt() ?: 0}%", Color(0xFF5372DC))
+                                InfoItem(R.drawable.humidity, "${viewModel.humidityList.getOrNull(index)?.toInt() ?: 0}%", Color(0xFFD05CA2))
+                                InfoItem(R.drawable.wind_speed, "${viewModel.windSpeedList.getOrNull(index)?.toInt() ?: 0}km/h", Color(0xFF3F9CBE))
                             }
                         }
 
@@ -302,6 +303,7 @@ fun WeatherMainScreen(
                             AirQualitySection(aqi = 92)
                         }
                         item {
+                            val index = viewModel.getCurrentIndex()
                             Column(
                                 modifier = Modifier
                                     .fillMaxWidth()
@@ -309,12 +311,12 @@ fun WeatherMainScreen(
                                     .padding(0.dp)
                             ) {
                                 val infoItems = listOf(
-                                    Triple(R.drawable.uv, "UV", "${viewModel.uvList.firstOrNull()?.toInt() ?: "-"}"),
-                                    Triple(R.drawable.feels_like, "Feels like", "${viewModel.feelsLikeList.firstOrNull()?.toInt() ?: "-"}°"),
-                                    Triple(R.drawable.humidity2, "Humidity", "${viewModel.humidityList.firstOrNull()?.toInt() ?: "-"}%"),
-                                    Triple(R.drawable.ese_wind, "ESE wind", "${viewModel.windSpeedList.firstOrNull()?.toInt() ?: "-"}km/h"),
-                                    Triple(R.drawable.air_pressure, "Air pressure", "${viewModel.pressureList.firstOrNull()?.toInt() ?: "-"}mmHg"),
-                                    Triple(R.drawable.visibility, "Visibility", "${(viewModel.visibilityList.firstOrNull()?.div(1000))?.toInt() ?: "-"}km")
+                                    Triple(R.drawable.uv, "UV", "${viewModel.uvList.getOrNull(index)?.toInt() ?: "-"}"),
+                                    Triple(R.drawable.feels_like, "Feels like", "${viewModel.feelsLikeList.getOrNull(index)?.toInt() ?: "-"}°"),
+                                    Triple(R.drawable.humidity2, "Humidity", "${viewModel.humidityList.getOrNull(index)?.toInt() ?: "-"}%"),
+                                    Triple(R.drawable.ese_wind, "ESE wind", "${viewModel.windSpeedList.getOrNull(index)?.toInt() ?: "-"}km/h"),
+                                    Triple(R.drawable.air_pressure, "Air pressure", "${viewModel.pressureList.getOrNull(index)?.let { (it * 0.750061683).toInt() } ?: "-"}mmHg"),
+                                    Triple(R.drawable.visibility, "Visibility", "${viewModel.visibilityList.getOrNull(index)?.let { (it / 1000).toInt() } ?: "-"}km")
                                 )
 
                                 for (row in infoItems.chunked(3)) {
@@ -471,13 +473,13 @@ fun ForecastItem(iconId: Int, temp: String, time: String, highlight: Boolean = f
                 shape = RoundedCornerShape(20)
             )
             .padding(6.dp)
-            .width(60.dp)
+            .width(50.dp)
     ) {
-        Text(temp, fontSize = 12.sp, color = Color(0xFF5372dc))
-        Spacer(modifier = Modifier.height(5.dp))
-        Image(painter = painterResource(id = iconId), contentDescription = null, modifier = Modifier.size(40.dp))
-        Spacer(modifier = Modifier.height(3.dp))
-        Text(time, fontSize = 10.sp, color = Color(0xFF5372dc))
+        Text(temp, fontSize = 10.sp, color = Color(0xFF5372dc))
+        Spacer(modifier = Modifier.height(4.dp))
+        Image(painter = painterResource(id = iconId), contentDescription = null, modifier = Modifier.size(30.dp))
+        Spacer(modifier = Modifier.height(2.dp))
+        Text(time, fontSize = 8.sp, color = Color(0xFF5372dc))
     }
 }
 
