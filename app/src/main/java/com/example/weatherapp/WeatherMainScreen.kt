@@ -1,5 +1,8 @@
 package com.example.weatherapp
 
+import android.content.Context
+import android.net.ConnectivityManager
+import android.net.NetworkCapabilities
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -20,8 +23,14 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import java.time.Instant
 import java.time.LocalDate
+import java.time.LocalDateTime
+import java.time.ZoneId
 import java.time.format.DateTimeFormatter
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -35,7 +44,19 @@ fun WeatherMainScreen(
     longitude: Double? = null,
     cityName: String = "Đang tải..."
 ) {
+    val context = LocalContext.current
+    val coroutineScope = rememberCoroutineScope()
+    var lastUpdateTime by remember { mutableStateOf<Long?>(null) }
+    val weatherDao = WeatherDatabase.getDatabase(context).weatherDao()
+
+    // Lấy thời gian cập nhật cuối cùng từ database
     LaunchedEffect(Unit) {
+        coroutineScope.launch {
+            val weatherData = withContext(Dispatchers.IO) {
+                weatherDao.getLatestWeatherDataWithDetails()
+            }
+            lastUpdateTime = weatherData?.weatherData?.id
+        }
         if (latitude != null && longitude != null) {
             viewModel.fetchWeather(latitude, longitude)
         }
@@ -54,6 +75,7 @@ fun WeatherMainScreen(
             viewModel.temperatureList.isNotEmpty() &&
             viewModel.weatherCodeList.isNotEmpty()
     val errorMessage = viewModel.errorMessage
+    val isNetworkAvailable = isNetworkAvailable(context)
 
     Scaffold(
         topBar = {
@@ -77,28 +99,58 @@ fun WeatherMainScreen(
                 .padding(horizontal = 30.dp)
         ) {
             when {
-                errorMessage != null -> {
+                !isNetworkAvailable -> {
                     Box(
                         modifier = Modifier.fillMaxSize(),
                         contentAlignment = Alignment.Center
                     ) {
-                        Text(
-                            text = errorMessage,
-                            fontSize = 16.sp,
-                            color = Color.Red
-                        )
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Text(
+                                text = "Không có kết nối mạng. Vui lòng kiểm tra lại.",
+                                fontSize = 16.sp,
+                                color = Color(0xFF5372dc)
+                            )
+                            lastUpdateTime?.let {
+                                Spacer(modifier = Modifier.height(8.dp))
+                                Text(
+                                    text = "Dữ liệu cập nhật lần cuối: ${
+                                        Instant.ofEpochMilli(it)
+                                            .atZone(ZoneId.systemDefault())
+                                            .toLocalDateTime()
+                                            .format(DateTimeFormatter.ofPattern("HH:mm, dd/MM/yyyy"))
+                                    }",
+                                    fontSize = 14.sp,
+                                    color = Color(0xFF5372dc)
+                                )
+                            }
+                        }
                     }
                 }
-                !isDataLoaded -> {
+                !isDataLoaded || errorMessage != null -> {
                     Box(
                         modifier = Modifier.fillMaxSize(),
                         contentAlignment = Alignment.Center
                     ) {
-                        Text(
-                            text = "Đang tải dữ liệu thời tiết...",
-                            fontSize = 16.sp,
-                            color = Color(0xFF5372dc)
-                        )
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Text(
+                                text = "Đang tải dữ liệu thời tiết...",
+                                fontSize = 16.sp,
+                                color = Color(0xFF5372dc)
+                            )
+                            lastUpdateTime?.let {
+                                Spacer(modifier = Modifier.height(8.dp))
+                                Text(
+                                    text = "Dữ liệu cập nhật lần cuối: ${
+                                        Instant.ofEpochMilli(it)
+                                            .atZone(ZoneId.systemDefault())
+                                            .toLocalDateTime()
+                                            .format(DateTimeFormatter.ofPattern("HH:mm, dd/MM/yyyy"))
+                                    }",
+                                    fontSize = 14.sp,
+                                    color = Color(0xFF5372dc)
+                                )
+                            }
+                        }
                     }
                 }
                 else -> {
@@ -174,26 +226,28 @@ fun WeatherMainScreen(
                                         modifier = Modifier.fillMaxWidth(),
                                         horizontalArrangement = Arrangement.SpaceBetween
                                     ) {
-                                        upcoming.forEachIndexed { index, (timeStr, temp) ->
+                                        upcoming.forEachIndexed { index, (timeStr, temp, weatherCode) ->
+                                            val time = LocalDateTime.parse(timeStr, DateTimeFormatter.ISO_LOCAL_DATE_TIME)
+                                            val formattedTime = time.format(DateTimeFormatter.ofPattern("HH:mm"))
                                             ForecastItem(
-                                                iconId = when (index) {
-                                                    0 -> R.drawable.sunny
-                                                    1 -> R.drawable.cloudy_with_sun
-                                                    2 -> R.drawable.rainingg
-                                                    else -> R.drawable.cloudy_with_sun
-                                                },
+                                                iconId = getWeatherIcon(weatherCode),
                                                 temp = "${temp.toInt()}°C",
-                                                time = timeStr.takeLast(5),
+                                                time = formattedTime,
                                                 highlight = index == 0
                                             )
                                         }
                                     }
                                 } else {
-                                    Text(
-                                        text = "Không có dữ liệu dự báo",
-                                        fontSize = 14.sp,
-                                        color = Color.Red
-                                    )
+                                    Box(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Text(
+                                            text = "Đang tải dữ liệu thời tiết...",
+                                            fontSize = 14.sp,
+                                            color = Color(0xFF5372dc)
+                                        )
+                                    }
                                 }
                             }
                         }
@@ -298,6 +352,24 @@ fun WeatherMainScreen(
                                         }
                                     }
                                 }
+                            }
+                        }
+                        item {
+                            lastUpdateTime?.let {
+                                Text(
+                                    text = "Cập nhật lần cuối: ${
+                                        Instant.ofEpochMilli(it)
+                                            .atZone(ZoneId.systemDefault())
+                                            .toLocalDateTime()
+                                            .format(DateTimeFormatter.ofPattern("HH:mm, dd/MM/yyyy"))
+                                    }",
+                                    fontSize = 12.sp,
+                                    color = Color(0xFF5372dc),
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(vertical = 8.dp),
+                                    textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                                )
                             }
                         }
                     }
@@ -407,6 +479,16 @@ fun ForecastItem(iconId: Int, temp: String, time: String, highlight: Boolean = f
         Spacer(modifier = Modifier.height(3.dp))
         Text(time, fontSize = 10.sp, color = Color(0xFF5372dc))
     }
+}
+
+@Composable
+fun isNetworkAvailable(context: Context): Boolean {
+    val connectivityManager = context.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
+    val network = connectivityManager.activeNetwork ?: return false
+    val capabilities = connectivityManager.getNetworkCapabilities(network) ?: return false
+    return capabilities.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) ||
+            capabilities.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR) ||
+            capabilities.hasTransport(NetworkCapabilities.TRANSPORT_ETHERNET)
 }
 
 @Preview(showBackground = true, heightDp = 2000)
