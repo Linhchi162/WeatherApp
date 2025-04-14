@@ -8,6 +8,8 @@ import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import java.time.LocalDateTime
+import java.time.format.DateTimeFormatter
 
 class WeatherViewModel(private val weatherDao: WeatherDao) : ViewModel() {
     var timeList: List<String> by mutableStateOf(emptyList())
@@ -41,32 +43,50 @@ class WeatherViewModel(private val weatherDao: WeatherDao) : ViewModel() {
                 }
                 if (weatherDataWithDetails != null && weatherDataWithDetails.details.isNotEmpty()) {
                     val details = weatherDataWithDetails.details
-                    timeList = details.map { it.time }
-                    temperatureList = details.map { it.temperature_2m }
-                    weatherCodeList = details.map { it.weather_code }
-                    precipitationList = details.map { it.precipitation_probability }
-                    humidityList = details.map { it.relative_humidity_2m }
-                    windSpeedList = details.map { it.wind_speed_10m }
-                    uvList = details.map { it.uv_index }
-                    feelsLikeList = details.map { it.apparent_temperature }
-                    pressureList = details.map { it.surface_pressure }
-                    visibilityList = details.map { it.visibility }
+                    // Lấy dữ liệu từ thời gian hiện tại trở về trước 1 giờ và 24 giờ sau
+                    val now = LocalDateTime.now()
+                    val startTime = now.minusHours(1) // Lấy dữ liệu từ 1 giờ trước để đảm bảo có mốc gần nhất
+                    val endTime = now.plusHours(24)
+                    val filteredDetails = details.filter {
+                        val detailTime = LocalDateTime.parse(it.time, DateTimeFormatter.ISO_LOCAL_DATE_TIME)
+                        detailTime.isAfter(startTime) && detailTime.isBefore(endTime)
+                    }
+
+                    timeList = filteredDetails.map { it.time }
+                    temperatureList = filteredDetails.map { it.temperature_2m }
+                    weatherCodeList = filteredDetails.map { it.weather_code }
+                    precipitationList = filteredDetails.map { it.precipitation_probability }
+                    humidityList = filteredDetails.map { it.relative_humidity_2m }
+                    windSpeedList = filteredDetails.map { it.wind_speed_10m }
+                    uvList = filteredDetails.map { it.uv_index }
+                    feelsLikeList = filteredDetails.map { it.apparent_temperature }
+                    pressureList = filteredDetails.map { it.surface_pressure }
+                    visibilityList = filteredDetails.map { it.visibility }
                     errorMessage = null
                 } else {
-                    errorMessage = "Không có dữ liệu thời tiết. Đang chờ dữ liệu từ API..."
+                    errorMessage = "Đang tải dữ liệu thời tiết..."
                 }
             } catch (e: Exception) {
-                errorMessage = "Lỗi lấy dữ liệu: ${e.message}"
+                errorMessage = "Đang tải dữ liệu thời tiết..."
             }
         }
     }
 
     fun getCurrentIndex(): Int {
-        val currentTime = java.time.LocalDateTime.now().format(java.time.format.DateTimeFormatter.ISO_LOCAL_DATE_TIME)
-        return timeList.indexOfFirst { it >= currentTime }.takeIf { it >= 0 } ?: timeList.lastIndex.coerceAtLeast(0)
+        val now = LocalDateTime.now()
+        // Tìm mốc thời gian gần nhất trước hoặc tại thời gian hiện tại
+        val index = timeList.indexOfLast { time ->
+            val detailTime = LocalDateTime.parse(time, DateTimeFormatter.ISO_LOCAL_DATE_TIME)
+            detailTime.isBefore(now) || detailTime == now
+        }
+        return if (index >= 0) index else 0
     }
 
-    fun getUpcomingForecast(): List<Pair<String, Double>> {
-        return timeList.zip(temperatureList) { time, temp -> Pair(time, temp) }
+    fun getUpcomingForecast(): List<Triple<String, Double, Int>> {
+        val index = getCurrentIndex()
+        // Lấy tối đa 5 mốc thời gian từ mốc gần nhất
+        return timeList.drop(index).take(5).mapIndexed { i, time ->
+            Triple(time, temperatureList[index + i], weatherCodeList[index + i])
+        }
     }
 }
