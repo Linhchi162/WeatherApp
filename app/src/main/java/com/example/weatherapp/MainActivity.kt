@@ -82,10 +82,50 @@ class MainActivity : ComponentActivity() {
 
         fusedLocationClient = LocationServices.getFusedLocationProviderClient(this)
         locationManager = getSystemService(Context.LOCATION_SERVICE) as LocationManager
+
+        // Kiểm tra và cập nhật dữ liệu ngay khi mở app
+        checkAndUpdateWeatherData()
+
         setContent {
             WeatherMainScreen()
         }
         checkLocationPermission()
+    }
+
+    private fun checkAndUpdateWeatherData() {
+        CoroutineScope(Dispatchers.IO).launch {
+            val latestWeatherData = weatherDao.getLatestWeatherDataWithDetails()
+            val shouldUpdate = if (latestWeatherData != null) {
+                // Kiểm tra xem dữ liệu có cũ hơn 15 phút không
+                val lastUpdateTime = latestWeatherData.weatherData.id // id là timestamp
+                val currentTime = System.currentTimeMillis()
+                val fifteenMinutesInMillis = 15 * 60 * 1000
+                (currentTime - lastUpdateTime) > fifteenMinutesInMillis
+            } else {
+                true // Nếu không có dữ liệu, cần cập nhật
+            }
+
+            if (shouldUpdate && isInternetAvailable()) {
+                // Chạy WeatherUpdateWorker ngay lập tức
+                val constraints = Constraints.Builder()
+                    .setRequiredNetworkType(NetworkType.CONNECTED)
+                    .build()
+
+                val oneTimeWorkRequest = OneTimeWorkRequestBuilder<WeatherUpdateWorker>()
+                    .setConstraints(constraints)
+                    .build()
+
+                WorkManager.getInstance(this@MainActivity)
+                    .enqueueUniqueWork(
+                        "weather_update_immediate",
+                        ExistingWorkPolicy.REPLACE,
+                        oneTimeWorkRequest
+                    )
+            }
+
+            // Lên lịch cập nhật định kỳ
+            scheduleWeatherUpdateWorker()
+        }
     }
 
     private fun checkLocationPermission() {
@@ -225,8 +265,6 @@ class MainActivity : ComponentActivity() {
             putFloat("longitude", location.longitude.toFloat())
             apply()
         }
-
-        scheduleWeatherUpdateWorker()
 
         if (!isInternetAvailable()) {
             Log.w("WeatherApp", "Không có kết nối internet, không thể lấy tên thành phố")
