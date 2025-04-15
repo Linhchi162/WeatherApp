@@ -18,7 +18,7 @@ class WeatherRespone {
         val visibility: List<Double>,
         val precipitation: List<Double>,
         val weathercode: List<Int>,
-        ) {
+    ) {
 
     }
 
@@ -32,5 +32,5 @@ class WeatherRespone {
         val windspeed_10m: Double,
         val time: String,
 
-    )
+        )
 }
