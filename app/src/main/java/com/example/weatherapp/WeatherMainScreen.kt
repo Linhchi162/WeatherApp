@@ -47,6 +47,7 @@ fun WeatherMainScreen(
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
     var lastUpdateTime by remember { mutableStateOf<Long?>(null) }
+    var forecastDays by remember { mutableStateOf(7) } // Mặc định 7 ngày
     val weatherDao = WeatherDatabase.getDatabase(context).weatherDao()
 
     // Lấy thời gian cập nhật cuối cùng từ database
@@ -66,14 +67,13 @@ fun WeatherMainScreen(
     val dateFormatter = DateTimeFormatter.ofPattern("MMM, dd")
     val currentDateStr = currentDate.format(dateFormatter)
 
-    val dailyForecast = (0..4).map { daysToAdd ->
-        val date = currentDate.plusDays(daysToAdd.toLong())
-        date.format(DateTimeFormatter.ofPattern("E dd"))
-    }
-
     val isDataLoaded = viewModel.timeList.isNotEmpty() &&
             viewModel.temperatureList.isNotEmpty() &&
-            viewModel.weatherCodeList.isNotEmpty()
+            viewModel.weatherCodeList.isNotEmpty() &&
+            viewModel.dailyTimeList.isNotEmpty() &&
+            viewModel.dailyTempMaxList.isNotEmpty() &&
+            viewModel.dailyTempMinList.isNotEmpty() &&
+            viewModel.dailyWeatherCodeList.isNotEmpty()
     val errorMessage = viewModel.errorMessage
     val isNetworkAvailable = isNetworkAvailable(context)
 
@@ -253,6 +253,36 @@ fun WeatherMainScreen(
                             }
                         }
 
+                        // Thêm nút chọn 7 hoặc 14 ngày
+                        item {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(vertical = 8.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Button(
+                                    onClick = { forecastDays = 7 },
+                                    colors = ButtonDefaults.buttonColors(
+                                        containerColor = if (forecastDays == 7) Color(0xFF5372dc) else Color.Gray
+                                    ),
+                                    modifier = Modifier.weight(1f)
+                                ) {
+                                    Text("7 ngày", color = Color.White)
+                                }
+                                Spacer(modifier = Modifier.width(16.dp))
+                                Button(
+                                    onClick = { forecastDays = 14 },
+                                    colors = ButtonDefaults.buttonColors(
+                                        containerColor = if (forecastDays == 14) Color(0xFF5372dc) else Color.Gray
+                                    ),
+                                    modifier = Modifier.weight(1f)
+                                ) {
+                                    Text("14 ngày", color = Color.White)
+                                }
+                            }
+                        }
+
                         item {
                             Column(
                                 modifier = Modifier
@@ -260,29 +290,57 @@ fun WeatherMainScreen(
                                     .background(Color.White.copy(alpha = 0.4f), shape = RoundedCornerShape(7))
                                     .padding(16.dp)
                             ) {
-                                dailyForecast.forEachIndexed { index, day ->
-                                    Row(
+                                val dailyForecastData = viewModel.getDailyForecast(forecastDays)
+
+                                if (dailyForecastData.isNotEmpty()) {
+                                    dailyForecastData.forEachIndexed { index, (time, temps, weatherCode) ->
+                                        val date = LocalDate.parse(time, DateTimeFormatter.ISO_LOCAL_DATE)
+                                        val formattedDate = date.format(DateTimeFormatter.ofPattern("E dd"))
+                                        Row(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .padding(vertical = 8.dp)
+                                                .background(
+                                                    color = if (index == 0) Color.White.copy(alpha = 0.4f) else Color.Transparent,
+                                                    shape = RoundedCornerShape(10)
+                                                )
+                                                .padding(horizontal = 12.dp, vertical = 8.dp),
+                                            horizontalArrangement = Arrangement.SpaceBetween,
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            Text(
+                                                formattedDate,
+                                                color = Color(0xFF5372dc),
+                                                fontWeight = FontWeight.Medium
+                                            )
+                                            Image(
+                                                painter = painterResource(id = getWeatherIcon(weatherCode)),
+                                                contentDescription = null,
+                                                modifier = Modifier.size(30.dp)
+                                            )
+                                            Text(
+                                                "${temps.second.toInt()}° / ${temps.first.toInt()}°",
+                                                color = Color(0xFF5372dc)
+                                            )
+                                            InfoItem(
+                                                R.drawable.rain_dropp,
+                                                "${viewModel.dailyPrecipitationList.getOrNull(index)?.toInt() ?: 0}%",
+                                                Color(0xFF5372dc)
+                                            )
+                                        }
+                                    }
+                                } else {
+                                    Box(
                                         modifier = Modifier
                                             .fillMaxWidth()
-                                            .padding(vertical = 8.dp)
-                                            .background(
-                                                color = if (index == 0) Color.White.copy(alpha = 0.4f) else Color.Transparent,
-                                                shape = RoundedCornerShape(10)
-                                            )
-                                            .padding(horizontal = 12.dp, vertical = 8.dp),
-                                        horizontalArrangement = Arrangement.SpaceBetween,
-                                        verticalAlignment = Alignment.CenterVertically
+                                            .padding(vertical = 8.dp),
+                                        contentAlignment = Alignment.Center
                                     ) {
-                                        Text(day, color = Color(0xFF5372dc), fontWeight = FontWeight.Medium)
-                                        Image(painter = painterResource(id = when (index) {
-                                            0 -> R.drawable.sunny
-                                            1 -> R.drawable.cloudy_with_sun
-                                            2 -> R.drawable.rainingg
-                                            3 -> R.drawable.cloudy_with_sun
-                                            else -> R.drawable.sunny
-                                        }), contentDescription = null, modifier = Modifier.size(30.dp))
-                                        Text("24°/ 27°", color = Color(0xFF5372dc))
-                                        InfoItem(R.drawable.rain_dropp, "6%", Color(0xFF5372dc))
+                                        Text(
+                                            text = "Đang tải dự báo thời tiết...",
+                                            fontSize = 14.sp,
+                                            color = Color(0xFF5372dc)
+                                        )
                                     }
                                 }
 
@@ -299,9 +357,11 @@ fun WeatherMainScreen(
                                 }
                             }
                         }
+
                         item {
                             AirQualitySection(aqi = 92)
                         }
+
                         item {
                             val index = viewModel.getCurrentIndex()
                             Column(
@@ -356,6 +416,7 @@ fun WeatherMainScreen(
                                 }
                             }
                         }
+
                         item {
                             lastUpdateTime?.let {
                                 Text(
@@ -381,6 +442,8 @@ fun WeatherMainScreen(
     }
 }
 
+// Giữ nguyên các composable khác (AirQualitySection, AirQualityBar, InfoItem, ForecastItem, isNetworkAvailable, WeatherScreenPreview)
+//xóa
 @Composable
 fun AirQualitySection(aqi: Int) {
     val (description, color, percentage) = getAqiInfo(aqi)
@@ -415,7 +478,7 @@ fun AirQualitySection(aqi: Int) {
         AirQualityBar(percentage = percentage)
     }
 }
-
+//
 @Composable
 fun AirQualityBar(percentage: Float) {
     val barHeight = 5.dp
