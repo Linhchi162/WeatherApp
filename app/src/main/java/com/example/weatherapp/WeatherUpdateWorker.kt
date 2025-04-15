@@ -29,15 +29,18 @@ class WeatherUpdateWorker(
             val url = "https://api.open-meteo.com/v1/forecast?latitude=$latitude&longitude=$longitude" +
                     "&hourly=temperature_2m,relative_humidity_2m,precipitation_probability,weathercode," +
                     "windspeed_10m,uv_index,apparent_temperature,surface_pressure,visibility" +
+                    "&daily=temperature_2m_max,temperature_2m_min,weathercode,precipitation_probability_max" +
                     "&timezone=auto"
             val request = Request.Builder().url(url).build()
             val client = OkHttpClient()
             val response = client.newCall(request).execute()
             val responseBody = response.body?.string()
 
+
             if (response.isSuccessful && responseBody != null) {
                 val jsonObject = JSONObject(responseBody)
                 val hourly = jsonObject.getJSONObject("hourly")
+                val daily = jsonObject.getJSONObject("daily")
 
                 val timeList = hourly.getJSONArray("time").let { array ->
                     (0 until array.length()).map { array.getString(it) }
@@ -70,10 +73,31 @@ class WeatherUpdateWorker(
                     (0 until array.length()).map { array.getInt(it) }
                 }
 
+                //daily
+                val dailyTimeList = daily.getJSONArray("time").let { array ->
+                    (0 until array.length()).map { array.getString(it) }
+                }
+                val dailyTempMaxList = daily.getJSONArray("temperature_2m_max").let { array ->
+                    (0 until array.length()).map { array.getDouble(it) }
+                }
+                val dailyTempMinList = daily.getJSONArray("temperature_2m_min").let { array ->
+                    (0 until array.length()).map { array.getDouble(it) }
+                }
+                val dailyWeatherCodeList = daily.getJSONArray("weathercode").let { array ->
+                    (0 until array.length()).map { array.getInt(it) }
+                }
+                val dailyPrecipitationList = daily.getJSONArray("precipitation_probability_max").let { array ->
+                    (0 until array.length()).map { array.getDouble(it) }
+                }
                 val expectedLength = timeList.size
                 if (listOf(temperatureList, uvIndexList, apparentTemperatureList, humidityList, windSpeedList,
                         pressureList, visibilityList, precipitationList, weatherCodeList).any { it.size != expectedLength }) {
-                    Log.e("WeatherUpdateWorker", "Dữ liệu API không đồng bộ: timeList=$expectedLength, nhưng các mảng khác có độ dài khác")
+                    Log.e("WeatherUpdateWorker", "Dữ liệu hourly không đồng bộ")
+                    return@withContext Result.retry()
+                }
+                val dailyExpectedLength = dailyTimeList.size
+                if (listOf(dailyTempMaxList, dailyTempMinList, dailyWeatherCodeList, dailyPrecipitationList).any { it.size != dailyExpectedLength }) {
+                    Log.e("WeatherUpdateWorker", "Dữ liệu daily không đồng bộ")
                     return@withContext Result.retry()
                 }
 
@@ -105,8 +129,20 @@ class WeatherUpdateWorker(
                 }
 
                 weatherDao.insertWeatherDetails(weatherDetails)
-                Log.d("WeatherUpdateWorker", "Lưu ${weatherDetails.size} WeatherDetail thành công")
 
+                val dailyDetails = dailyTimeList.mapIndexed { index, time ->
+                    WeatherDailyDetail(
+                        weatherDataId = weatherDataId,
+                        time = time,
+                        temperature_2m_max = dailyTempMaxList[index],
+                        temperature_2m_min = dailyTempMinList[index],
+                        precipitation_probability_max = dailyPrecipitationList[index],
+                        weather_code = dailyWeatherCodeList[index]
+                    )
+                }
+                weatherDao.insertWeatherDailyDetails(dailyDetails)
+                Log.d("WeatherUpdateWorker", "Lưu ${weatherDetails.size} WeatherDetail thành công")
+                Log.d("WeatherUpdateWorker", "Lưu ${dailyDetails.size} WeatherDailyDetail thành công")
                 Result.success()
             } else {
                 Log.w("WeatherUpdateWorker", "Lỗi gọi API Open-Meteo: ${response.code}")
