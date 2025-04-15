@@ -10,6 +10,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
+import android.util.Log
 
 class WeatherViewModel(private val weatherDao: WeatherDao) : ViewModel() {
     var timeList: List<String> by mutableStateOf(emptyList())
@@ -32,6 +33,16 @@ class WeatherViewModel(private val weatherDao: WeatherDao) : ViewModel() {
         private set
     var visibilityList: List<Double> by mutableStateOf(emptyList())
         private set
+    var dailyTimeList: List<String> by mutableStateOf(emptyList())
+        private set
+    var dailyTempMaxList: List<Double> by mutableStateOf(emptyList())
+        private set
+    var dailyTempMinList: List<Double> by mutableStateOf(emptyList())
+        private set
+    var dailyWeatherCodeList: List<Int> by mutableStateOf(emptyList())
+        private set
+    var dailyPrecipitationList: List<Double> by mutableStateOf(emptyList())
+        private set
     var errorMessage: String? by mutableStateOf(null)
         private set
 
@@ -41,11 +52,15 @@ class WeatherViewModel(private val weatherDao: WeatherDao) : ViewModel() {
                 val weatherDataWithDetails = withContext(Dispatchers.IO) {
                     weatherDao.getLatestWeatherDataWithDetails()
                 }
+                val weatherDataWithDailyDetails = withContext(Dispatchers.IO) {
+                    weatherDao.getLatestWeatherDataWithDailyDetails()
+                }
+
+                // Xử lý hourly
                 if (weatherDataWithDetails != null && weatherDataWithDetails.details.isNotEmpty()) {
                     val details = weatherDataWithDetails.details
-                    // Lấy dữ liệu từ thời gian hiện tại trở về trước 1 giờ và 24 giờ sau
                     val now = LocalDateTime.now()
-                    val startTime = now.minusHours(1) // Lấy dữ liệu từ 1 giờ trước để đảm bảo có mốc gần nhất
+                    val startTime = now.minusHours(1)
                     val endTime = now.plusHours(24)
                     val filteredDetails = details.filter {
                         val detailTime = LocalDateTime.parse(it.time, DateTimeFormatter.ISO_LOCAL_DATE_TIME)
@@ -66,15 +81,27 @@ class WeatherViewModel(private val weatherDao: WeatherDao) : ViewModel() {
                 } else {
                     errorMessage = "Đang tải dữ liệu thời tiết..."
                 }
+
+                // Xử lý daily
+                if (weatherDataWithDailyDetails != null && weatherDataWithDailyDetails.dailyDetails.isNotEmpty()) {
+                    val dailyDetails = weatherDataWithDailyDetails.dailyDetails
+                    dailyTimeList = dailyDetails.map { it.time }
+                    dailyTempMaxList = dailyDetails.map { it.temperature_2m_max }
+                    dailyTempMinList = dailyDetails.map { it.temperature_2m_min }
+                    dailyWeatherCodeList = dailyDetails.map { it.weather_code }
+                    dailyPrecipitationList = dailyDetails.map { it.precipitation_probability_max }
+                } else {
+                    errorMessage = "Đang tải dữ liệu thời tiết..."
+                }
             } catch (e: Exception) {
                 errorMessage = "Đang tải dữ liệu thời tiết..."
+                Log.e("WeatherViewModel", "Lỗi khi lấy dữ liệu: ${e.message}")
             }
         }
     }
 
     fun getCurrentIndex(): Int {
         val now = LocalDateTime.now()
-        // Tìm mốc thời gian gần nhất trước hoặc tại thời gian hiện tại
         val index = timeList.indexOfLast { time ->
             val detailTime = LocalDateTime.parse(time, DateTimeFormatter.ISO_LOCAL_DATE_TIME)
             detailTime.isBefore(now) || detailTime == now
@@ -84,9 +111,18 @@ class WeatherViewModel(private val weatherDao: WeatherDao) : ViewModel() {
 
     fun getUpcomingForecast(): List<Triple<String, Double, Int>> {
         val index = getCurrentIndex()
-        // Lấy tối đa 5 mốc thời gian từ mốc gần nhất
         return timeList.drop(index).take(5).mapIndexed { i, time ->
             Triple(time, temperatureList[index + i], weatherCodeList[index + i])
+        }
+    }
+
+    fun getDailyForecast(days: Int): List<Triple<String, Pair<Double, Double>, Int>> {
+        return dailyTimeList.take(days).mapIndexed { index, time ->
+            Triple(
+                time,
+                Pair(dailyTempMaxList[index], dailyTempMinList[index]),
+                dailyWeatherCodeList[index]
+            )
         }
     }
 }

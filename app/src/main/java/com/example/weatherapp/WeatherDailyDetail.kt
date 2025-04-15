@@ -6,7 +6,7 @@ import androidx.room.Index
 import androidx.room.PrimaryKey
 
 @Entity(
-    tableName = "weather_detail",
+    tableName = "weather_daily_detail",
     foreignKeys = [ForeignKey(
         entity = WeatherData::class,
         parentColumns = ["id"],
@@ -15,17 +15,12 @@ import androidx.room.PrimaryKey
     )],
     indices = [Index(value = ["weatherDataId"])]
 )
-data class WeatherDetail(
+data class WeatherDailyDetail(
     @PrimaryKey(autoGenerate = true) val detailId: Long = 0,
     val weatherDataId: Long,
     val time: String,
-    val temperature_2m: Double,
-    val uv_index: Double,
-    val apparent_temperature: Double,
-    val relative_humidity_2m: Double,
-    val wind_speed_10m: Double,
-    val surface_pressure: Double,
-    val visibility: Double,
-    val precipitation_probability: Double,
+    val temperature_2m_max: Double,
+    val temperature_2m_min: Double,
+    val precipitation_probability_max: Double,
     val weather_code: Int
 )

@@ -1,14 +1,15 @@
 package com.example.weatherapp
 
+
 import androidx.room.Embedded
 import androidx.room.Relation
 
-data class WeatherDataWithDetails(
+data class WeatherDataWithDailyDetails(
     @Embedded val weatherData: WeatherData,
     @Relation(
         parentColumn = "id",
         entityColumn = "weatherDataId",
-        entity = WeatherDetail::class
+        entity = WeatherDailyDetail::class
     )
-    val details: List<WeatherDetail>
+    val dailyDetails: List<WeatherDailyDetail>
 )
