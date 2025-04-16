@@ -111,7 +111,7 @@ class WeatherViewModel(private val weatherDao: WeatherDao) : ViewModel() {
 
     fun getUpcomingForecast(): List<Triple<String, Double, Int>> {
         val index = getCurrentIndex()
-        return timeList.drop(index).take(5).mapIndexed { i, time ->
+        return timeList.drop(index).take(24).mapIndexed { i, time ->
             Triple(time, temperatureList[index + i], weatherCodeList[index + i])
         }
     }

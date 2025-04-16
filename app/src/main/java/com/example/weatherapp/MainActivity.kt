@@ -1,5 +1,4 @@
 package com.example.weatherapp
-
 import android.Manifest
 import android.content.Context
 import android.content.Intent
@@ -17,27 +16,11 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AlertDialog
-import androidx.compose.foundation.Canvas
-import androidx.compose.foundation.Image
-import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.*
 import androidx.compose.runtime.*
-import androidx.compose.ui.Alignment
-import androidx.compose.ui.Modifier
-import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.res.painterResource
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.tooling.preview.Preview
-import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.navigation.NavController
 import com.google.android.gms.location.FusedLocationProviderClient
 import com.google.android.gms.location.LocationCallback
 import com.google.android.gms.location.LocationRequest
@@ -51,8 +34,6 @@ import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import org.json.JSONObject
-import java.time.LocalDate
-import java.time.format.DateTimeFormatter
 import java.util.concurrent.TimeUnit
 import androidx.work.*
 
@@ -61,6 +42,7 @@ class MainActivity : ComponentActivity() {
     private lateinit var locationManager: LocationManager
     private lateinit var weatherDatabase: WeatherDatabase
     private lateinit var weatherDao: WeatherDao
+    private var navController: NavController? = null
 
     private val requestPermissionLauncher = registerForActivityResult(ActivityResultContracts.RequestPermission()) { isGranted ->
         if (isGranted) {
@@ -87,7 +69,49 @@ class MainActivity : ComponentActivity() {
         checkAndUpdateWeatherData()
 
         setContent {
-            WeatherMainScreen()
+            val cityNameState = remember { mutableStateOf("Đang tải...") }
+            val latitudeState = remember { mutableStateOf<Double?>(null) }
+            val longitudeState = remember { mutableStateOf<Double?>(null) }
+
+            val viewModel: WeatherViewModel = viewModel(
+                factory = WeatherViewModelFactory(weatherDao)
+            )
+
+            WeatherMainScreen(
+                viewModel = viewModel,
+                latitude = latitudeState.value,
+                longitude = longitudeState.value,
+                cityName = cityNameState.value
+            )
+
+            LaunchedEffect(Unit) {
+                if (ContextCompat.checkSelfPermission(this@MainActivity, android.Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED) {
+                    checkGpsAndPrompt()
+                }
+            }
+
+            LaunchedEffect(Unit) {
+                try {
+                    fusedLocationClient.lastLocation.addOnSuccessListener { location ->
+                        if (location != null) {
+                            latitudeState.value = location.latitude
+                            longitudeState.value = location.longitude
+                            cityNameState.value = "Tọa độ: ${location.latitude}, ${location.longitude}"
+                            val sharedPreferences = getSharedPreferences("WeatherPrefs", Context.MODE_PRIVATE)
+                            with(sharedPreferences.edit()) {
+                                putFloat("latitude", location.latitude.toFloat())
+                                putFloat("longitude", location.longitude.toFloat())
+                                apply()
+                            }
+                        } else {
+                            cityNameState.value = "Không thể lấy vị trí"
+                            Toast.makeText(this@MainActivity, "Không thể lấy vị trí", Toast.LENGTH_LONG).show()
+                        }
+                    }
+                } catch (e: SecurityException) {
+                    Log.e("MainActivity", "Lỗi quyền vị trí: ${e.message}")
+                }
+            }
         }
         checkLocationPermission()
     }
