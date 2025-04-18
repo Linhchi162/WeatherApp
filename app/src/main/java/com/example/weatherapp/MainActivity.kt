@@ -17,25 +17,8 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AlertDialog
-import androidx.compose.foundation.Canvas
-import androidx.compose.foundation.Image
-import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.*
 import androidx.compose.runtime.*
-import androidx.compose.ui.Alignment
-import androidx.compose.ui.Modifier
-import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.res.painterResource
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.tooling.preview.Preview
-import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.google.android.gms.location.FusedLocationProviderClient
@@ -51,8 +34,6 @@ import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import org.json.JSONObject
-import java.time.LocalDate
-import java.time.format.DateTimeFormatter
 import java.util.concurrent.TimeUnit
 import androidx.work.*
 
@@ -68,9 +49,6 @@ class MainActivity : ComponentActivity() {
         } else {
             Log.e("MainActivity", "Quyền vị trí bị từ chối")
             Toast.makeText(this, "Quyền vị trí bị từ chối", Toast.LENGTH_LONG).show()
-            setContent {
-                WeatherMainScreen(cityName = "Không có quyền vị trí")
-            }
         }
     }
 
@@ -87,17 +65,41 @@ class MainActivity : ComponentActivity() {
         checkAndUpdateWeatherData()
 
         setContent {
-            WeatherMainScreen()
+            val viewModel: WeatherViewModel = viewModel(
+                factory = WeatherViewModelFactory(weatherDao)
+            )
+
+            WeatherMainScreen(viewModel = viewModel)
+
+            LaunchedEffect(Unit) {
+                if (ContextCompat.checkSelfPermission(this@MainActivity, android.Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED) {
+                    checkGpsAndPrompt()
+                }
+            }
+
+            LaunchedEffect(Unit) {
+                try {
+                    fusedLocationClient.lastLocation.addOnSuccessListener { location ->
+                        if (location != null) {
+                            fetchCityName(location, viewModel)
+                        } else {
+                            Toast.makeText(this@MainActivity, "Không thể lấy vị trí", Toast.LENGTH_LONG).show()
+                        }
+                    }
+                } catch (e: SecurityException) {
+                    Log.e("MainActivity", "Lỗi quyền vị trí: ${e.message}")
+                }
+            }
         }
         checkLocationPermission()
     }
 
     private fun checkAndUpdateWeatherData() {
         CoroutineScope(Dispatchers.IO).launch {
-            val latestWeatherData = weatherDao.getLatestWeatherDataWithDetails()
-            val shouldUpdate = if (latestWeatherData != null) {
-                // Kiểm tra xem dữ liệu có cũ hơn 15 phút không
-                val lastUpdateTime = latestWeatherData.weatherData.id // id là timestamp
+            val allWeatherData = weatherDao.getAllWeatherData()
+            val shouldUpdate = if (allWeatherData.isNotEmpty()) {
+                val latestWeatherData = allWeatherData.maxByOrNull { it.lastUpdated }
+                val lastUpdateTime = latestWeatherData?.lastUpdated ?: 0L
                 val currentTime = System.currentTimeMillis()
                 val fifteenMinutesInMillis = 15 * 60 * 1000
                 (currentTime - lastUpdateTime) > fifteenMinutesInMillis
@@ -106,7 +108,6 @@ class MainActivity : ComponentActivity() {
             }
 
             if (shouldUpdate && isInternetAvailable()) {
-                // Chạy WeatherUpdateWorker ngay lập tức
                 val constraints = Constraints.Builder()
                     .setRequiredNetworkType(NetworkType.CONNECTED)
                     .build()
@@ -123,7 +124,6 @@ class MainActivity : ComponentActivity() {
                     )
             }
 
-            // Lên lịch cập nhật định kỳ
             scheduleWeatherUpdateWorker()
         }
     }
@@ -174,16 +174,14 @@ class MainActivity : ComponentActivity() {
             if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
                 Log.e("MainActivity", "Quyền vị trí không được cấp")
                 Toast.makeText(this, "Quyền vị trí không được cấp", Toast.LENGTH_LONG).show()
-                setContent {
-                    WeatherMainScreen(cityName = "Lỗi quyền vị trí")
-                }
                 return
             }
 
             fusedLocationClient.lastLocation.addOnSuccessListener { location ->
                 if (location != null) {
                     Log.d("WeatherApp", "Vị trí cuối cùng: lat=${location.latitude}, lon=${location.longitude}")
-                    fetchCityName(location)
+                    // viewModel sẽ được truyền từ setContent, không khởi tạo ở đây
+                    // fetchCityName sẽ được gọi từ LaunchedEffect trong setContent
                 } else {
                     Log.d("WeatherApp", "Vị trí cuối cùng không khả dụng, yêu cầu cập nhật vị trí mới")
                     requestNewLocation()
@@ -191,22 +189,13 @@ class MainActivity : ComponentActivity() {
             }.addOnFailureListener { e ->
                 Log.e("WeatherApp", "Lỗi lấy vị trí cuối cùng: ${e.message}")
                 Toast.makeText(this, "Lỗi vị trí: ${e.message}", Toast.LENGTH_LONG).show()
-                setContent {
-                    WeatherMainScreen(cityName = "Lỗi vị trí")
-                }
             }
         } catch (e: SecurityException) {
             Log.e("WeatherApp", "Lỗi quyền vị trí: ${e.message}")
             Toast.makeText(this, "Lỗi quyền vị trí", Toast.LENGTH_LONG).show()
-            setContent {
-                WeatherMainScreen(cityName = "Lỗi quyền vị trí")
-            }
         } catch (e: Exception) {
             Log.e("WeatherApp", "Lỗi không xác định khi lấy vị trí: ${e.message}")
             Toast.makeText(this, "Lỗi không xác định: ${e.message}", Toast.LENGTH_LONG).show()
-            setContent {
-                WeatherMainScreen(cityName = "Lỗi không xác định")
-            }
         }
     }
 
@@ -218,17 +207,14 @@ class MainActivity : ComponentActivity() {
 
         val locationCallback = object : LocationCallback() {
             override fun onLocationResult(locationResult: LocationResult) {
-                super.onLocationResult(locationResult)
                 val location = locationResult.lastLocation
                 if (location != null) {
                     Log.d("WeatherApp", "Vị trí mới: lat=${location.latitude}, lon=${location.longitude}")
-                    fetchCityName(location)
+                    // viewModel sẽ được truyền từ setContent, không khởi tạo ở đây
+                    // fetchCityName sẽ được gọi từ LaunchedEffect trong setContent
                 } else {
                     Log.e("WeatherApp", "Không thể lấy vị trí mới")
                     Toast.makeText(this@MainActivity, "Không lấy được vị trí", Toast.LENGTH_LONG).show()
-                    setContent {
-                        WeatherMainScreen(cityName = "Vị trí không khả dụng")
-                    }
                 }
                 fusedLocationClient.removeLocationUpdates(this)
             }
@@ -239,26 +225,17 @@ class MainActivity : ComponentActivity() {
                 .addOnFailureListener { e ->
                     Log.e("WeatherApp", "Lỗi yêu cầu vị trí mới: ${e.message}")
                     Toast.makeText(this@MainActivity, "Lỗi vị trí: ${e.message}", Toast.LENGTH_LONG).show()
-                    setContent {
-                        WeatherMainScreen(cityName = "Lỗi vị trí")
-                    }
                 }
         } catch (e: SecurityException) {
             Log.e("WeatherApp", "Lỗi quyền vị trí: ${e.message}")
             Toast.makeText(this@MainActivity, "Lỗi quyền vị trí", Toast.LENGTH_LONG).show()
-            setContent {
-                WeatherMainScreen(cityName = "Lỗi quyền vị trí")
-            }
         } catch (e: Exception) {
             Log.e("WeatherApp", "Lỗi không xác định khi yêu cầu vị trí: ${e.message}")
             Toast.makeText(this@MainActivity, "Lỗi không xác định: ${e.message}", Toast.LENGTH_LONG).show()
-            setContent {
-                WeatherMainScreen(cityName = "Lỗi không xác định")
-            }
         }
     }
 
-    private fun fetchCityName(location: Location) {
+    private fun fetchCityName(location: Location, viewModel: WeatherViewModel) {
         val sharedPreferences = getSharedPreferences("WeatherPrefs", Context.MODE_PRIVATE)
         with(sharedPreferences.edit()) {
             putFloat("latitude", location.latitude.toFloat())
@@ -269,18 +246,12 @@ class MainActivity : ComponentActivity() {
         if (!isInternetAvailable()) {
             Log.w("WeatherApp", "Không có kết nối internet, không thể lấy tên thành phố")
             Toast.makeText(this, "Không có kết nối internet, không thể lấy tên thành phố", Toast.LENGTH_LONG).show()
-            setContent {
-                val viewModel: WeatherViewModel = viewModel(
-                    factory = WeatherViewModelFactory(weatherDao)
-                )
-                viewModel.fetchWeather(location.latitude, location.longitude)
-                WeatherMainScreen(
-                    viewModel = viewModel,
-                    latitude = location.latitude,
-                    longitude = location.longitude,
-                    cityName = "Tọa độ: ${location.latitude}, ${location.longitude}"
-                )
-            }
+            val city = City(
+                name = "Vị trí hiện tại",
+                latitude = location.latitude,
+                longitude = location.longitude
+            )
+            viewModel.addCity(city)
             return
         }
 
@@ -296,63 +267,45 @@ class MainActivity : ComponentActivity() {
                 if (response.isSuccessful && responseBody != null) {
                     val jsonObject = JSONObject(responseBody)
                     val features = jsonObject.getJSONArray("features")
-                    val city = if (features.length() > 0) {
+                    val cityName = if (features.length() > 0) {
                         val firstFeature = features.getJSONObject(0)
                         val properties = firstFeature.getJSONObject("properties")
                         properties.optString("city", "Không xác định")
                     } else {
                         "Không xác định"
                     }
-                    Log.d("WeatherApp", "Thành phố từ Geoapify API: $city")
+                    Log.d("WeatherApp", "Thành phố từ Geoapify API: $cityName")
 
                     withContext(Dispatchers.Main) {
-                        setContent {
-                            val viewModel: WeatherViewModel = viewModel(
-                                factory = WeatherViewModelFactory(weatherDao)
-                            )
-                            viewModel.fetchWeather(location.latitude, location.longitude)
-                            WeatherMainScreen(
-                                viewModel = viewModel,
-                                latitude = location.latitude,
-                                longitude = location.longitude,
-                                cityName = if (city == "Không xác định") "Vị trí không xác định" else city
-                            )
-                        }
+                        val city = City(
+                            name = if (cityName == "Không xác định") "Vị trí hiện tại" else cityName,
+                            latitude = location.latitude,
+                            longitude = location.longitude
+                        )
+                        viewModel.addCity(city)
                     }
                 } else {
                     Log.e("WeatherApp", "Lỗi gọi Geoapify API: ${response.code}")
                     withContext(Dispatchers.Main) {
                         Toast.makeText(this@MainActivity, "Lỗi lấy tên thành phố từ API", Toast.LENGTH_LONG).show()
-                        setContent {
-                            val viewModel: WeatherViewModel = viewModel(
-                                factory = WeatherViewModelFactory(weatherDao)
-                            )
-                            viewModel.fetchWeather(location.latitude, location.longitude)
-                            WeatherMainScreen(
-                                viewModel = viewModel,
-                                latitude = location.latitude,
-                                longitude = location.longitude,
-                                cityName = "Lỗi lấy tên thành phố"
-                            )
-                        }
+                        val city = City(
+                            name = "Vị trí hiện tại",
+                            latitude = location.latitude,
+                            longitude = location.longitude
+                        )
+                        viewModel.addCity(city)
                     }
                 }
             } catch (e: Exception) {
                 Log.e("WeatherApp", "Lỗi gọi Geoapify API: ${e.message}")
                 withContext(Dispatchers.Main) {
                     Toast.makeText(this@MainActivity, "Lỗi lấy tên thành phố: ${e.message}", Toast.LENGTH_LONG).show()
-                    setContent {
-                        val viewModel: WeatherViewModel = viewModel(
-                            factory = WeatherViewModelFactory(weatherDao)
-                        )
-                        viewModel.fetchWeather(location.latitude, location.longitude)
-                        WeatherMainScreen(
-                            viewModel = viewModel,
-                            latitude = location.latitude,
-                            longitude = location.longitude,
-                            cityName = "Lỗi lấy tên thành phố"
-                        )
-                    }
+                    val city = City(
+                        name = "Vị trí hiện tại",
+                        latitude = location.latitude,
+                        longitude = location.longitude
+                    )
+                    viewModel.addCity(city)
                 }
             }
         }
@@ -379,22 +332,5 @@ class MainActivity : ComponentActivity() {
     }
 }
 
-fun getAqiInfo(aqi: Int): Triple<String, Color, Float> {
-    return when (aqi) {
-        in 0..50 -> Triple("Good", Color(0xFF3FAE6D), 0.1f)
-        in 51..100 -> Triple("Moderate", Color(0xFF9DBE39), 0.3f)
-        in 101..150 -> Triple("Unhealthy", Color(0xFFFFC107), 0.5f)
-        in 151..200 -> Triple("Very Unhealthy", Color(0xFFFF6F22), 0.75f)
-        in 201..300 -> Triple("Hazardous", Color(0xFFD74944), 0.9f)
-        else -> Triple("Severe", Color(0xFFA10000), 1.0f)
-    }
-}
 
-fun getWeatherIcon(code: Int): Int {
-    return when (code) {
-        0 -> R.drawable.sunny
-        1, 2 -> R.drawable.cloudy_with_sun
-        in 80..82 -> R.drawable.rainingg
-        else -> R.drawable.cloudy_with_sun
-    }
-}
+
