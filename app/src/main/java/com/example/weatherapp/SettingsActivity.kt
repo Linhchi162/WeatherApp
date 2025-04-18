@@ -87,7 +87,7 @@ fun SettingsScreen(onBackClick: () -> Unit) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .background(Color(0xFFF8F0FF), shape = RoundedCornerShape(15.dp))
+                .background(Color(0xFFFAF6FF), shape = RoundedCornerShape(15.dp))
                 .padding(16.dp)
         ) {
             Row(
@@ -215,7 +215,7 @@ fun SettingsScreen(onBackClick: () -> Unit) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .background(Color(0xFFF8F0FF), shape = RoundedCornerShape(15.dp))
+                .background(Color(0xFFFAF6FF), shape = RoundedCornerShape(15.dp))
                 .padding(16.dp)
         ) {
             Row(
@@ -270,7 +270,7 @@ fun SettingsScreen(onBackClick: () -> Unit) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .background(Color(0xFFF8F0FF), shape = RoundedCornerShape(15.dp))
+                .background(Color(0xFFFAF6FF), shape = RoundedCornerShape(15.dp))
                 .padding(16.dp)
         ) {
             UnitItem(

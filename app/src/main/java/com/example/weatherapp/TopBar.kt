@@ -8,7 +8,6 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
-import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -18,11 +17,8 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
 
 @Composable
-fun TopBar(
-    context: Context,
-    onRefresh: () -> Unit
-) {
-    val localContext = LocalContext.current // Lấy Context từ LocalContext
+fun TopBar(context: Context, onSearchClick: () -> Unit) {
+    val localContext = LocalContext.current
 
     Row(
         modifier = Modifier
@@ -36,15 +32,10 @@ fun TopBar(
     ) {
         Image(
             painter = painterResource(id = R.drawable.kinh_lup),
-            contentDescription = null,
-            modifier = Modifier.size(27.dp)
-        )
-        Image(
-            painter = painterResource(id = R.drawable.refresh),
-            contentDescription = "Refresh",
+            contentDescription = "Search",
             modifier = Modifier
                 .size(27.dp)
-                .clickable { onRefresh() }
+                .clickable { onSearchClick() }
         )
         Box(
             modifier = Modifier
@@ -53,10 +44,13 @@ fun TopBar(
                     try {
                         Log.d("TopBar", "Settings button clicked")
                         Log.d("TopBar", "Creating Toast")
-
+                        val toast = Toast.makeText(localContext, "Settings clicked", Toast.LENGTH_SHORT)
                         Log.d("TopBar", "Showing Toast")
+                        toast.show()
                         Log.d("TopBar", "Starting SettingsActivity")
-                        val intent = Intent(localContext, SettingsActivity::class.java)
+                        val intent = Intent(localContext, SettingsActivity::class.java).apply {
+                            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                        }
                         localContext.startActivity(intent)
                         Log.d("TopBar", "SettingsActivity started")
                     } catch (e: Exception) {

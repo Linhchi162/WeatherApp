@@ -75,6 +75,16 @@ dependencies {
     implementation ("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3")
     implementation ("androidx.work:work-runtime-ktx:2.9.1")
 
-    implementation ("androidx.navigation:navigation-compose:2.7.7")
+    implementation ("androidx.compose.material:material:1.5.0") // Đảm bảo bạn có phiên bản Compose Material
+    implementation ("com.google.accompanist:accompanist-swiperefresh:0.27.0")
+    implementation ("com.google.accompanist:accompanist-pager:0.25.1")
 
+    implementation ("androidx.compose.ui:ui:1.6.4")
+    implementation ("androidx.compose.material3:material3:1.2.1")
+    implementation("com.squareup.okhttp3:logging-interceptor:4.12.0")
+
+    implementation("com.squareup.okhttp3:okhttp:4.12.0") // Hoặc phiên bản bạn dùng
+    implementation("com.squareup.okhttp3:logging-interceptor:4.12.0") // <<-- Đảm bảo dòng này có và cùng phiên bản
 }
+
+
