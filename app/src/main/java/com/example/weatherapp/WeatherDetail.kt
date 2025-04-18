@@ -17,6 +17,7 @@ import androidx.room.PrimaryKey
 )
 data class WeatherDetail(
     @PrimaryKey(autoGenerate = true) val detailId: Long = 0,
+    val cityName: String,
     val weatherDataId: Long,
     val time: String,
     val temperature_2m: Double,
