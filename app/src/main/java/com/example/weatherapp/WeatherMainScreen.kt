@@ -1,6 +1,9 @@
 package com.example.weatherapp
 
+import android.content.BroadcastReceiver
 import android.content.Context
+import android.content.Intent
+import android.content.IntentFilter
 import android.content.SharedPreferences
 import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
@@ -27,19 +30,35 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.localbroadcastmanager.content.LocalBroadcastManager
 import com.google.accompanist.pager.ExperimentalPagerApi
 import com.google.accompanist.pager.HorizontalPager
 import com.google.accompanist.pager.rememberPagerState
 import com.google.accompanist.swiperefresh.SwipeRefresh
 import com.google.accompanist.swiperefresh.SwipeRefreshIndicator
 import com.google.accompanist.swiperefresh.rememberSwipeRefreshState
+import com.google.android.gms.maps.MapView
+import com.google.android.gms.maps.CameraUpdateFactory
+import com.google.android.gms.maps.model.LatLng
+import com.google.android.gms.maps.model.LatLngBounds
+import com.google.android.gms.maps.model.GroundOverlayOptions
+import com.google.android.gms.maps.model.BitmapDescriptorFactory
+import com.google.android.gms.maps.model.GroundOverlay
+import com.google.android.gms.maps.GoogleMap
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
+import java.net.URL
 import java.time.Instant
 import java.time.LocalDate
 import java.time.LocalDateTime
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import kotlin.math.*
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalPagerApi::class)
 @Composable
@@ -63,70 +82,106 @@ fun WeatherMainScreen(
     var isRefreshing by remember { mutableStateOf(false) }
     val swipeRefreshState = rememberSwipeRefreshState(isRefreshing)
 
-    // Đọc đơn vị từ SharedPreferences
     val preferences = context.getSharedPreferences("weather_prefs", Context.MODE_PRIVATE)
     var temperatureUnit by remember { mutableStateOf(UnitConverter.TemperatureUnit.CELSIUS) }
     var windSpeedUnit by remember { mutableStateOf(UnitConverter.WindSpeedUnit.KMH) }
     var pressureUnit by remember { mutableStateOf(UnitConverter.PressureUnit.MMHG) }
     var visibilityUnit by remember { mutableStateOf(UnitConverter.VisibilityUnit.KM) }
 
-    // Debug giá trị SharedPreferences
     LaunchedEffect(Unit) {
-        Log.d("WeatherMainScreen", "Temperature Unit: ${preferences.getString("temperature_unit", "Độ C (°C)")}")
-        Log.d("WeatherMainScreen", "Wind Unit: ${preferences.getString("wind_unit", "Kilomet mỗi giờ (km/h)")}")
-        Log.d("WeatherMainScreen", "Pressure Unit: ${preferences.getString("pressure_unit", "Millimet thủy ngân (mmHg)")}")
-        Log.d("WeatherMainScreen", "Visibility Unit: ${preferences.getString("visibility_unit", "Kilomet (km)")}")
+        temperatureUnit = when (preferences.getString("temperature_unit", "Độ C (°C)")) {
+            "Độ C (°C)" -> UnitConverter.TemperatureUnit.CELSIUS
+            "Độ F (°F)" -> UnitConverter.TemperatureUnit.FAHRENHEIT
+            else -> UnitConverter.TemperatureUnit.CELSIUS
+        }
+        windSpeedUnit = when (preferences.getString("wind_unit", "Kilomet mỗi giờ (km/h)")) {
+            "Kilomet mỗi giờ (km/h)" -> UnitConverter.WindSpeedUnit.KMH
+            "Thang đo Beaufort" -> UnitConverter.WindSpeedUnit.BEAUFORT
+            "Mét mỗi giây (m/s)" -> UnitConverter.WindSpeedUnit.MS
+            "Feet mỗi giây (ft/s)" -> UnitConverter.WindSpeedUnit.FTS
+            "Dặm mỗi giờ (mph)" -> UnitConverter.WindSpeedUnit.MPH
+            "Hải lý mỗi giờ (hải lý)" -> UnitConverter.WindSpeedUnit.KNOTS
+            else -> UnitConverter.WindSpeedUnit.KMH
+        }
+        pressureUnit = when (preferences.getString("pressure_unit", "Millimet thủy ngân (mmHg)")) {
+            "Hectopascal (hPa)" -> UnitConverter.PressureUnit.HPA
+            "Millimet thủy ngân (mmHg)" -> UnitConverter.PressureUnit.MMHG
+            "Inch thủy ngân (inHg)" -> UnitConverter.PressureUnit.INHG
+            "Millibar (mb)" -> UnitConverter.PressureUnit.MB
+            "Pound trên inch vuông (psi)" -> UnitConverter.PressureUnit.PSI
+            else -> UnitConverter.PressureUnit.MMHG
+        }
+        visibilityUnit = when (preferences.getString("visibility_unit", "Kilomet (km)")) {
+            "Kilomet (km)" -> UnitConverter.VisibilityUnit.KM
+            "Dặm (mi)" -> UnitConverter.VisibilityUnit.MI
+            "Mét (m)" -> UnitConverter.VisibilityUnit.M
+            "Feet (ft)" -> UnitConverter.VisibilityUnit.FT
+            else -> UnitConverter.VisibilityUnit.KM
+        }
+        Log.d("WeatherMainScreen", "Temperature Unit: $temperatureUnit")
+        Log.d("WeatherMainScreen", "Wind Unit: $windSpeedUnit")
+        Log.d("WeatherMainScreen", "Pressure Unit: $pressureUnit")
+        Log.d("WeatherMainScreen", "Visibility Unit: $visibilityUnit")
     }
 
-    // Lắng nghe thay đổi SharedPreferences
     DisposableEffect(Unit) {
-        val listener = SharedPreferences.OnSharedPreferenceChangeListener { prefs, key ->
-            Log.d("WeatherMainScreen", "SharedPreferences changed: $key = ${prefs.getString(key, "")}")
-            when (key) {
-                "temperature_unit" -> {
-                    temperatureUnit = when (prefs.getString("temperature_unit", "Độ C (°C)")) {
-                        "Độ C (°C)" -> UnitConverter.TemperatureUnit.CELSIUS
-                        "Độ F (°F)" -> UnitConverter.TemperatureUnit.FAHRENHEIT
-                        else -> UnitConverter.TemperatureUnit.CELSIUS
-                    }
-                }
-                "wind_unit" -> {
-                    windSpeedUnit = when (prefs.getString("wind_unit", "Kilomet mỗi giờ (km/h)")) {
-                        "Kilomet mỗi giờ (km/h)" -> UnitConverter.WindSpeedUnit.KMH
-                        "Thang đo Beaufort" -> UnitConverter.WindSpeedUnit.BEAUFORT
-                        "Mét mỗi giây (m/s)" -> UnitConverter.WindSpeedUnit.MS
-                        "Feet mỗi giây (ft/s)" -> UnitConverter.WindSpeedUnit.FTS
-                        "Dặm mỗi giờ (mph)" -> UnitConverter.WindSpeedUnit.MPH
-                        "Hải lý mỗi giờ (hải lý)" -> UnitConverter.WindSpeedUnit.KNOTS
-                        else -> UnitConverter.WindSpeedUnit.KMH
-                    }
-                }
-                "pressure_unit" -> {
-                    pressureUnit = when (prefs.getString("pressure_unit", "Millimet thủy ngân (mmHg)")) {
-                        "Hectopascal (hPa)" -> UnitConverter.PressureUnit.HPA
-                        "Millimet thủy ngân (mmHg)" -> UnitConverter.PressureUnit.MMHG
-                        "Inch thủy ngân (inHg)" -> UnitConverter.PressureUnit.INHG
-                        "Millibar (mb)" -> UnitConverter.PressureUnit.MB
-                        "Pound trên inch vuông (psi)" -> UnitConverter.PressureUnit.PSI
-                        else -> UnitConverter.PressureUnit.MMHG
-                    }
-                }
-                "visibility_unit" -> {
-                    visibilityUnit = when (prefs.getString("visibility_unit", "Kilomet (km)")) {
-                        "Kilomet (km)" -> UnitConverter.VisibilityUnit.KM
-                        "Dặm (mi)" -> UnitConverter.VisibilityUnit.MI
-                        "Mét (m)" -> UnitConverter.VisibilityUnit.M
-                        "Feet (ft)" -> UnitConverter.VisibilityUnit.FT
-                        else -> UnitConverter.VisibilityUnit.KM
+        val receiver = object : BroadcastReceiver() {
+            override fun onReceive(context: Context, intent: Intent) {
+                if (intent.action == "com.example.weatherapp.UNIT_CHANGED") {
+                    val unitType = intent.getStringExtra("unit_type")
+                    val unitValue = intent.getStringExtra("unit_value")
+                    Log.d("WeatherMainScreen", "Received unit change: $unitType = $unitValue")
+                    when (unitType) {
+                        "Nhiệt độ" -> {
+                            temperatureUnit = when (unitValue) {
+                                "Độ C (°C)" -> UnitConverter.TemperatureUnit.CELSIUS
+                                "Độ F (°F)" -> UnitConverter.TemperatureUnit.FAHRENHEIT
+                                else -> UnitConverter.TemperatureUnit.CELSIUS
+                            }
+                        }
+                        "Gió" -> {
+                            windSpeedUnit = when (unitValue) {
+                                "Kilomet mỗi giờ (km/h)" -> UnitConverter.WindSpeedUnit.KMH
+                                "Thang đo Beaufort" -> UnitConverter.WindSpeedUnit.BEAUFORT
+                                "Mét mỗi giây (m/s)" -> UnitConverter.WindSpeedUnit.MS
+                                "Feet mỗi giây (ft/s)" -> UnitConverter.WindSpeedUnit.FTS
+                                "Dặm mỗi giờ (mph)" -> UnitConverter.WindSpeedUnit.MPH
+                                "Hải lý mỗi giờ (hải lý)" -> UnitConverter.WindSpeedUnit.KNOTS
+                                else -> UnitConverter.WindSpeedUnit.KMH
+                            }
+                        }
+                        "Áp suất không khí" -> {
+                            pressureUnit = when (unitValue) {
+                                "Hectopascal (hPa)" -> UnitConverter.PressureUnit.HPA
+                                "Millimet thủy ngân (mmHg)" -> UnitConverter.PressureUnit.MMHG
+                                "Inch thủy ngân (inHg)" -> UnitConverter.PressureUnit.INHG
+                                "Millibar (mb)" -> UnitConverter.PressureUnit.MB
+                                "Pound trên inch vuông (psi)" -> UnitConverter.PressureUnit.PSI
+                                else -> UnitConverter.PressureUnit.MMHG
+                            }
+                        }
+                        "Tầm nhìn" -> {
+                            visibilityUnit = when (unitValue) {
+                                "Kilomet (km)" -> UnitConverter.VisibilityUnit.KM
+                                "Dặm (mi)" -> UnitConverter.VisibilityUnit.MI
+                                "Mét (m)" -> UnitConverter.VisibilityUnit.M
+                                "Feet (ft)" -> UnitConverter.VisibilityUnit.FT
+                                else -> UnitConverter.VisibilityUnit.KM
+                            }
+                        }
                     }
                 }
             }
         }
-        preferences.registerOnSharedPreferenceChangeListener(listener)
-        onDispose { preferences.unregisterOnSharedPreferenceChangeListener(listener) }
+
+        val filter = IntentFilter("com.example.weatherapp.UNIT_CHANGED")
+        LocalBroadcastManager.getInstance(context).registerReceiver(receiver, filter)
+
+        onDispose {
+            LocalBroadcastManager.getInstance(context).unregisterReceiver(receiver)
+        }
     }
 
-    // Cập nhật thành phố hiện tại trong ViewModel khi Pager chuyển trang
     LaunchedEffect(pagerState.currentPage, cities.size) {
         if (cities.isNotEmpty() && pagerState.currentPage < cities.size) {
             viewModel.updateCurrentCity(cities[pagerState.currentPage].name)
@@ -240,6 +295,7 @@ fun WeatherMainScreen(
                                         item { DailyForecastSection(city, weatherData, viewModel, temperatureUnit) }
                                         item { AirQualitySection(aqi = currentAqi) }
                                         item { OtherDetailsSection(weatherData, viewModel, temperatureUnit, windSpeedUnit, pressureUnit, visibilityUnit) }
+                                        item { WeatherRadarSection(city) }
                                         item { LastUpdateSection(weatherData) }
                                         item { Spacer(modifier = Modifier.height(20.dp)) }
                                     }
@@ -273,6 +329,266 @@ fun WeatherMainScreen(
                 onDismiss = { showSearchScreen = false }
             )
         }
+    }
+}
+
+fun latLonToTileXY(lat: Double, lon: Double, zoom: Int): Pair<Int, Int> {
+    val latRad = Math.toRadians(lat)
+    val n = 1 shl zoom
+    val xTile = ((lon + 180.0) / 360.0 * n).toInt()
+    val yTile = ((1.0 - ln(tan(latRad) + 1 / cos(latRad)) / PI) / 2.0 * n).toInt()
+    return Pair(xTile, yTile)
+}
+
+fun tileToLatLonBounds(x: Int, y: Int, zoom: Int): LatLngBounds {
+    val n = 1 shl zoom
+    val lonDeg1 = x.toDouble() / n * 360.0 - 180.0
+    val lonDeg2 = (x + 1).toDouble() / n * 360.0 - 180.0
+
+    val latRad1 = atan(sinh(PI * (1 - 2 * y.toDouble() / n)))
+    val latDeg1 = Math.toDegrees(latRad1)
+    val latRad2 = atan(sinh(PI * (1 - 2 * (y + 1).toDouble() / n)))
+    val latDeg2 = Math.toDegrees(latRad2)
+
+    val bounds = LatLngBounds(
+        LatLng(latDeg2, lonDeg1), // Góc Tây Nam
+        LatLng(latDeg1, lonDeg2)  // Góc Đông Bắc
+    )
+
+    Log.d("WeatherRadarSection", "Bounds for tile ($x, $y) at zoom $zoom: SW(${latDeg2}, ${lonDeg1}), NE(${latDeg1}, ${lonDeg2})")
+    return bounds
+}
+
+fun getTilesForViewport(bounds: LatLngBounds, zoom: Int): List<Pair<Int, Int>> {
+    val southwest = bounds.southwest
+    val northeast = bounds.northeast
+
+    val (minX, maxY) = latLonToTileXY(southwest.latitude, southwest.longitude, zoom)
+    val (maxX, minY) = latLonToTileXY(northeast.latitude, northeast.longitude, zoom)
+
+    val tiles = mutableListOf<Pair<Int, Int>>()
+    val n = 1 shl zoom
+
+    for (x in minX..maxX) {
+        for (y in minY..maxY) {
+            val wrappedX = (x + n) % n // Xử lý vòng quanh kinh tuyến 180
+            tiles.add(Pair(wrappedX, y))
+        }
+    }
+
+    Log.d("WeatherRadarSection", "Tiles for viewport at zoom $zoom: $tiles")
+    return tiles
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun WeatherRadarSection(city: City) {
+    val context = LocalContext.current
+    var radarOverlays by remember { mutableStateOf<Map<String, Bitmap?>>(emptyMap()) }
+    var errorMessage by remember { mutableStateOf<String?>(null) }
+    var googleMap by remember { mutableStateOf<GoogleMap?>(null) }
+    var mapView by remember { mutableStateOf<MapView?>(null) }
+    var currentTiles by remember { mutableStateOf<List<Pair<Int, Int>>>(emptyList()) }
+    var currentZoom by remember { mutableStateOf(6) }
+    val overlaysOnMap = remember { mutableMapOf<String, GroundOverlay>() } // Lưu trữ các lớp phủ trên bản đồ
+
+    val openWeatherMapApiKey = "960b4897d630b53c8faeb909817bf31a"
+    var selectedLayer by remember { mutableStateOf("precipitation") }
+    var expanded by remember { mutableStateOf(false) }
+
+    val weatherLayers = listOf(
+        "precipitation" to "Mưa",
+        "clouds" to "Mây",
+        "wind" to "Gió",
+        "temp" to "Nhiệt độ"
+    )
+
+    val transparencyMap = mapOf(
+        "precipitation" to 0.0f,
+        "clouds" to 0.1f,
+        "wind" to 0.3f,
+        "temp" to 0.3f
+    )
+
+    // Tải lớp phủ cho các tile
+    suspend fun loadOverlaysForTiles(tiles: List<Pair<Int, Int>>, zoom: Int, layers: List<String>) {
+        val fetchedOverlays = mutableMapOf<String, Bitmap?>()
+        tiles.forEach { (xTile, yTile) ->
+            layers.forEach { layer ->
+                val key = "$layer-$zoom-$xTile-$yTile"
+                if (radarOverlays[key] == null) { // Chỉ tải nếu chưa có trong bộ nhớ đệm
+                    val bitmap = withContext(Dispatchers.IO) {
+                        try {
+                            val url = "https://tile.openweathermap.org/map/$layer/$zoom/$xTile/$yTile.png?appid=$openWeatherMapApiKey"
+                            Log.d("WeatherRadarSection", "Fetching layer $layer from: $url")
+                            val connection = URL(url).openConnection()
+                            connection.connect()
+                            val bitmap = BitmapFactory.decodeStream(connection.getInputStream())
+                            if (bitmap == null) {
+                                Log.e("WeatherRadarSection", "Bitmap is null for layer $layer at tile ($xTile, $yTile)")
+                            } else {
+                                Log.d("WeatherRadarSection", "Successfully fetched bitmap for layer $layer at tile ($xTile, $yTile), size: ${bitmap.width}x${bitmap.height}")
+                            }
+                            bitmap
+                        } catch (e: Exception) {
+                            Log.e("WeatherRadarSection", "Error loading layer $layer at tile ($xTile, $yTile): ${e.message}")
+                            errorMessage = "Không thể tải dữ liệu ${weatherLayers.find { it.first == layer }?.second}: ${e.message}"
+                            null
+                        }
+                    }
+                    fetchedOverlays[key] = bitmap
+                }
+            }
+        }
+        withContext(Dispatchers.Main) {
+            radarOverlays = radarOverlays + fetchedOverlays
+        }
+    }
+
+    // Thêm lớp phủ vào bản đồ
+    fun addOverlaysToMap(map: GoogleMap, tiles: List<Pair<Int, Int>>, zoom: Int, layers: List<String>) {
+        // Xóa các lớp phủ cũ
+        overlaysOnMap.values.forEach { it.remove() }
+        overlaysOnMap.clear()
+
+        // Thêm các lớp phủ mới
+        tiles.forEach { (xTile, yTile) ->
+            layers.forEach { layer ->
+                val key = "$layer-$zoom-$xTile-$yTile"
+                radarOverlays[key]?.let { bitmap ->
+                    Log.d("WeatherRadarSection", "Adding overlay for layer $layer at tile ($xTile, $yTile)")
+                    val bounds = tileToLatLonBounds(xTile, yTile, zoom)
+                    val transparency = transparencyMap[layer] ?: 0.3f
+                    val overlayOptions = GroundOverlayOptions()
+                        .image(BitmapDescriptorFactory.fromBitmap(bitmap))
+                        .positionFromBounds(bounds)
+                        .transparency(transparency)
+                    val overlay = map.addGroundOverlay(overlayOptions)
+                    overlay?.let {
+                        overlaysOnMap[key] = it
+                    }
+                    mapView?.invalidate()
+                } ?: Log.e("WeatherRadarSection", "Bitmap for layer $layer at tile ($xTile, $yTile) is null")
+            }
+        }
+    }
+
+    LaunchedEffect(googleMap, selectedLayer, currentTiles, currentZoom) {
+        googleMap?.let { map ->
+            val layersToDisplay = listOf(selectedLayer)
+
+            loadOverlaysForTiles(currentTiles, currentZoom, layersToDisplay)
+            addOverlaysToMap(map, currentTiles, currentZoom, layersToDisplay)
+        }
+    }
+
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(Color.White.copy(alpha = 0.4f), shape = RoundedCornerShape(10.dp))
+            .padding(16.dp)
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                "Radar Thời Tiết",
+                fontWeight = FontWeight.Bold,
+                fontSize = 14.sp,
+                color = Color(0xFF5372dc)
+            )
+
+            Box {
+                TextButton(onClick = { expanded = true }) {
+                    Text(
+                        text = weatherLayers.find { it.first == selectedLayer }?.second ?: "Mưa",
+                        color = Color(0xFF5372dc),
+                        fontSize = 14.sp
+                    )
+                }
+                DropdownMenu(
+                    expanded = expanded,
+                    onDismissRequest = { expanded = false }
+                ) {
+                    weatherLayers.forEach { (layer, label) ->
+                        DropdownMenuItem(
+                            text = { Text(label) },
+                            onClick = {
+                                selectedLayer = layer
+                                expanded = false
+                            }
+                        )
+                    }
+                }
+            }
+        }
+        Spacer(modifier = Modifier.height(12.dp))
+
+        if (errorMessage != null) {
+            Text(
+                text = errorMessage!!,
+                fontSize = 14.sp,
+                color = Color.Red.copy(alpha = 0.8f),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 8.dp),
+                textAlign = TextAlign.Center
+            )
+        }
+
+        AndroidView(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(300.dp),
+            factory = { ctx ->
+                MapView(ctx).apply {
+                    onCreate(null)
+                    onStart()
+                    getMapAsync { map ->
+                        val cityLocation = LatLng(city.latitude, city.longitude)
+                        map.moveCamera(CameraUpdateFactory.newLatLngZoom(cityLocation, currentZoom.toFloat()))
+
+                        map.uiSettings.isZoomControlsEnabled = true
+                        map.uiSettings.isScrollGesturesEnabled = true
+                        map.uiSettings.isZoomGesturesEnabled = true
+                        map.uiSettings.isRotateGesturesEnabled = true
+
+                        map.setOnCameraIdleListener {
+                            val zoom = map.cameraPosition.zoom.toInt().coerceIn(3, 10) // Giới hạn zoom để tối ưu
+                            val visibleRegion = map.projection.visibleRegion.latLngBounds
+                            val tiles = getTilesForViewport(visibleRegion, zoom)
+
+                            currentZoom = zoom
+                            currentTiles = tiles
+                        }
+
+                        googleMap = map
+                        mapView = this
+
+                        // Khởi tạo tiles ban đầu
+                        val zoom = map.cameraPosition.zoom.toInt().coerceIn(3, 10)
+                        val visibleRegion = map.projection.visibleRegion.latLngBounds
+                        currentZoom = zoom
+                        currentTiles = getTilesForViewport(visibleRegion, zoom)
+                    }
+                }
+            },
+            update = { mv ->
+                mv.getMapAsync { map ->
+                    val cityLocation = LatLng(city.latitude, city.longitude)
+                    map.moveCamera(CameraUpdateFactory.newLatLngZoom(cityLocation, currentZoom.toFloat()))
+                    googleMap = map
+                    mapView = mv
+                }
+            },
+            onRelease = { mv ->
+                mv.onStop()
+                mv.onDestroy()
+                mapView = null
+            }
+        )
     }
 }
 
@@ -815,7 +1131,7 @@ fun getAqiRecommendation(description: String): String {
         "Không tốt" -> "Mọi người có thể bị ảnh hưởng sức khỏe, nhóm nhạy cảm có thể bị ảnh hưởng nghiêm trọng. Hạn chế ra ngoài."
         "Rất không tốt" -> "Cảnh báo sức khỏe nghiêm trọng. Mọi người nên tránh các hoạt động ngoài trời."
         "Nguy hiểm" -> "Cảnh báo khẩn cấp về sức khỏe. Mọi người nên ở trong nhà."
-        else -> "Không có thông tin khuyến nghị."
+        else -> "Không có Metalloin khuyến nghị."
     }
 }
 
