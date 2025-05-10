@@ -64,7 +64,7 @@ fun SettingsScreen(onBackClick: () -> Unit) {
         ) {
             IconButton(onClick = onBackClick) {
                 Icon(
-                    painter = painterResource(id = R.drawable.ic_menu_zoom),
+                    painter = painterResource(id = R.drawable.ic_delete),
                     contentDescription = "Back",
                     tint = Color(0xFF5372dc)
                 )

@@ -17,7 +17,6 @@ class WeatherUpdateWorker(
             // Lấy các service instance từ RetrofitInstance với tên đúng
             val openMeteoService = RetrofitInstance.api
             val airQualityService = RetrofitInstance.airQualityApi
-            val geoapifyService = RetrofitInstance.geoapifyApi // Lấy thêm geoapify nếu ViewModel cần
 
             // Tạo ViewModel với ĐỦ các tham số yêu cầu
             // Lưu ý: Việc tạo ViewModel trực tiếp trong Worker không phải là cách làm tốt nhất,
@@ -26,7 +25,6 @@ class WeatherUpdateWorker(
                 weatherDao,
                 openMeteoService,
                 airQualityService, // Truyền airQualityService
-                geoapifyService   // Truyền geoapifyService
             )
 
             // Lấy danh sách thành phố từ ViewModel

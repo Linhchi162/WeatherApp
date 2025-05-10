@@ -44,9 +44,7 @@ fun TopBar(context: Context, onSearchClick: () -> Unit) {
                     try {
                         Log.d("TopBar", "Settings button clicked")
                         Log.d("TopBar", "Creating Toast")
-                        val toast = Toast.makeText(localContext, "Settings clicked", Toast.LENGTH_SHORT)
                         Log.d("TopBar", "Showing Toast")
-                        toast.show()
                         Log.d("TopBar", "Starting SettingsActivity")
                         val intent = Intent(localContext, SettingsActivity::class.java).apply {
                             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)

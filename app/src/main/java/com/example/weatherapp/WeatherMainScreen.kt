@@ -6,10 +6,12 @@ import android.net.NetworkCapabilities // Import NetworkCapabilities
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items // Import items for LazyColumn/LazyRow
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -41,6 +43,7 @@ import java.time.format.DateTimeFormatter
 import kotlinx.coroutines.launch // Import launch
 
 
+
 // Import R if needed (assuming it's in the same package or imported correctly)
 // import com.example.weatherapp.R
 
@@ -52,19 +55,25 @@ fun WeatherMainScreen(
         factory = WeatherViewModelFactory(
             weatherDao = WeatherDatabase.getDatabase(LocalContext.current).weatherDao(),
             openMeteoService = RetrofitInstance.api, // Đảm bảo dùng đúng instance
-            airQualityService = RetrofitInstance.airQualityApi,
-            geoapifyService = RetrofitInstance.geoapifyApi
+            airQualityService = RetrofitInstance.airQualityApi
         )
     )
 ) {
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
-    // Lấy danh sách thành phố từ state của ViewModel
-    val cities = viewModel.citiesList // Giả sử citiesList là public hoặc có getter
-    val pagerState = rememberPagerState(initialPage = 0)
+    // Sử dụng danh sách thành phố từ viewModel
+    val cities = viewModel.citiesList
+    val initialPage = remember(cities, viewModel.currentCity) {
+        cities.indexOfFirst { it.name == viewModel.currentCity }.coerceAtLeast(0)
+    }
+    val pagerState = rememberPagerState(initialPage = initialPage)
 
     var showSearchOverlay by remember { mutableStateOf(false) }
     var showSearchScreen by remember { mutableStateOf(false) }
+    var showWeatherDetailsScreen by remember { mutableStateOf(false) }
+    var showNavBar by remember { mutableStateOf(true) }
+    var showDeleteCityDialog by remember { mutableStateOf(false) }
+    var showFilteredCitiesScreen by remember { mutableStateOf(false) }
     var isRefreshing by remember { mutableStateOf(false) }
     val swipeRefreshState = rememberSwipeRefreshState(isRefreshing)
 
@@ -86,7 +95,7 @@ fun WeatherMainScreen(
                     onSearchClick = { showSearchOverlay = true }
                 )
             },
-            containerColor = Color.Transparent, // Nền trong suốt để thấy gradient
+            containerColor = Color.Transparent,
             modifier = Modifier.fillMaxSize()
         ) { innerPadding ->
             SwipeRefresh(
@@ -225,16 +234,16 @@ fun WeatherMainScreen(
             }
         }
 
-        // Search Overlay và Search Screen (giữ nguyên logic hiển thị)
+        // Search Overlay và Search Screen
         if (showSearchOverlay) {
             SearchOverlay(
-                onBackClick = { showSearchOverlay = false }, // Đóng overlay
+                onBackClick = { showSearchOverlay = false },
                 onFilterClick = {
-                    showSearchOverlay = false
                     showSearchScreen = true
+                    showSearchOverlay = false
                 },
                 onDismiss = {
-                    viewModel.clearSearch() // Clear trạng thái search khi dismiss
+                    viewModel.clearSearch()
                     showSearchOverlay = false
                 },
                 viewModel = viewModel
@@ -242,11 +251,25 @@ fun WeatherMainScreen(
         }
         if (showSearchScreen) {
             SearchScreen(
-                onBackClick = {
+                onBackClick = { showSearchScreen = false },
+                onDismiss = { showSearchScreen = false },
+                onShowFilteredResults = { 
                     showSearchScreen = false
-                    // Không cần mở lại SearchOverlay ở đây, trừ khi muốn quay lại màn hình đó
+                    showFilteredCitiesScreen = true 
                 },
-                onDismiss = { showSearchScreen = false } // Chỉ cần đóng màn hình lọc
+                viewModel = viewModel
+            )
+        }
+        
+        // Hiển thị màn hình thành phố đã lọc
+        if (showFilteredCitiesScreen) {
+            FilteredCitiesScreen(
+                onBackClick = { 
+                    showFilteredCitiesScreen = false
+                    showSearchScreen = true // Quay lại màn hình lọc
+                },
+                onDismiss = { showFilteredCitiesScreen = false },
+                viewModel = viewModel
             )
         }
     }
@@ -854,7 +877,7 @@ fun formatTimestamp(timestamp: Long): String {
 //    val fakeViewModel = WeatherViewModel(
 //        FakeWeatherDao(), // Dao giả lập
 //        FakeOpenMeteoService(), // Service giả lập
-//        FakeGeoapifyService() // Service giả lập
+//        // Service giả lập removed
 //    )
 //    // Gán dữ liệu giả vào ViewModel nếu cần để preview
 //    fakeViewModel.weatherDataMap = mapOf(
@@ -899,9 +922,5 @@ fun formatTimestamp(timestamp: Long): String {
 //        )
 //    }
 //}
-//class FakeGeoapifyService : GeoapifyService { /* Implement hàm searchPlaces trả về dữ liệu giả */
-//    override suspend fun searchPlaces(searchText: String, apiKey: String, language: String, limit: Int, type: String): GeoapifyAutocompleteResponse {
-//        return GeoapifyAutocompleteResponse(emptyList())
-//    }
-//}
+//class FakeService { /* Removed */ }
 

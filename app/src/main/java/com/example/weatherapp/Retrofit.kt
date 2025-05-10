@@ -28,13 +28,6 @@ object RetrofitInstance {
             .build()
     }
 
-    // 3. Specific Client for Geoapify (can reuse base client if config is identical)
-    private val geoapifyHttpClient: OkHttpClient by lazy {
-        baseOkHttpClient.newBuilder()
-            // Add other specific interceptors if needed for Geoapify
-            .build()
-    }
-
     // --- Retrofit Instances ---
 
     /**
@@ -52,18 +45,6 @@ object RetrofitInstance {
     }
 
     /**
-     * Retrofit instance for Geoapify Geocoding API.
-     */
-    val geoapifyApi: GeoapifyService by lazy {
-        Retrofit.Builder()
-            .baseUrl("https://api.geoapify.com/")
-            .client(geoapifyHttpClient) // Sử dụng client Geoapify
-            .addConverterFactory(GsonConverterFactory.create())
-            .build()
-            .create(GeoapifyService::class.java)
-    }
-
-    /**
      * Retrofit instance for Open-Meteo Air Quality API.
      */
     val airQualityApi: AirQualityService by lazy {
@@ -75,18 +56,19 @@ object RetrofitInstance {
             .create(AirQualityService::class.java)
     }
 
+    /**
+     * Retrofit instance for GeoNames API.
+     */
+    val geoNamesApi: GeoNamesService by lazy {
+        Retrofit.Builder()
+            .baseUrl("http://api.geonames.org/") // Sử dụng API endpoint chính thức (HTTP)
+            .client(baseOkHttpClient)
+            .addConverterFactory(GsonConverterFactory.create())
+            .build()
+            .create(GeoNamesService::class.java)
+    }
 
     // --- API Keys ---
-    // IMPORTANT: Store API keys securely!
-    const val GEOAPIFY_API_KEY = "183500a3f01b45a5b6076845dae351b3"
-
-    // --- KHÔNG CÒN DÙNG INSTANCE 'api' CŨ NÀY NỮA ---
-    // val api: OpenMeteoService by lazy {
-    //     Retrofit.Builder()
-    //         .baseUrl("https://api.open-meteo.com/")
-    //         .addConverterFactory(GsonConverterFactory.create())
-    //         .build()
-    //         .create(OpenMeteoService::class.java)
-    // }
-
+    // GeoNames username (acts as API key)
+    const val GEONAMES_USERNAME = "lilchee" // Tài khoản GeoNames của người dùng
 }

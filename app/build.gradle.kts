@@ -78,6 +78,7 @@ dependencies {
     implementation ("androidx.compose.material:material:1.5.0") // Đảm bảo bạn có phiên bản Compose Material
     implementation ("com.google.accompanist:accompanist-swiperefresh:0.27.0")
     implementation ("com.google.accompanist:accompanist-pager:0.25.1")
+    implementation ("com.google.accompanist:accompanist-pager-indicators:0.25.1")
 
     implementation ("androidx.compose.ui:ui:1.6.4")
     implementation ("androidx.compose.material3:material3:1.2.1")
