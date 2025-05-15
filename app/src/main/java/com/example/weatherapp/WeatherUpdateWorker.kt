@@ -1,11 +1,19 @@
+
 package com.example.weatherapp
 
 import android.content.Context
+
+import android.content.Intent
+import androidx.localbroadcastmanager.content.LocalBroadcastManager
+
 import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import android.util.Log
+
+import java.time.LocalDate
+
 
 class WeatherUpdateWorker(
     context: Context,
@@ -14,20 +22,17 @@ class WeatherUpdateWorker(
     override suspend fun doWork(): Result = withContext(Dispatchers.IO) {
         try {
             val weatherDao = WeatherDatabase.getDatabase(applicationContext).weatherDao()
-            // Lấy các service instance từ RetrofitInstance với tên đúng
             val openMeteoService = RetrofitInstance.api
             val airQualityService = RetrofitInstance.airQualityApi
+            val geoapifyService = RetrofitInstance.geoapifyApi
 
-            // Tạo ViewModel với ĐỦ các tham số yêu cầu
-            // Lưu ý: Việc tạo ViewModel trực tiếp trong Worker không phải là cách làm tốt nhất,
-            // nhưng để sửa lỗi biên dịch trước mắt thì làm như sau:
             val viewModel = WeatherViewModel(
                 weatherDao,
                 openMeteoService,
-                airQualityService, // Truyền airQualityService
+                airQualityService,
+                geoapifyService
             )
 
-            // Lấy danh sách thành phố từ ViewModel
             val cities = viewModel.citiesList
 
             if (cities.isEmpty()) {
@@ -35,21 +40,24 @@ class WeatherUpdateWorker(
                 return@withContext Result.retry()
             }
 
-            // Cập nhật dữ liệu cho từng thành phố
             cities.forEach { city ->
                 try {
-                    // Gọi API cho từng thành phố
                     val response = openMeteoService.getWeather(
                         latitude = city.latitude,
                         longitude = city.longitude
                     )
 
-                    // Xóa dữ liệu cũ của thành phố
+                    // Get previous weather data for comparison
+                    val previousData = weatherDao.getLatestWeatherDataWithDailyDetailsForCity(city.name)
+                    val today = LocalDate.now()
+                    val tomorrow = today.plusDays(1)
+
+                    // Delete old data
                     weatherDao.deleteWeatherDataForCity(city.name)
                     weatherDao.deleteWeatherDetailsForCity(city.name)
                     weatherDao.deleteDailyDetailsForCity(city.name)
 
-                    // Lưu dữ liệu mới
+                    // Insert new data
                     val weatherData = WeatherData(
                         cityName = city.name,
                         latitude = city.latitude,
@@ -59,7 +67,6 @@ class WeatherUpdateWorker(
                     val weatherDataId = weatherDao.insertWeatherData(weatherData)
                     Log.d("WeatherUpdateWorker", "Lưu WeatherData thành công với ID: $weatherDataId cho ${city.name}")
 
-                    // Lưu dữ liệu hourly
                     val hourlyDetails = response.hourly.time.mapIndexed { index, time ->
                         WeatherDetail(
                             weatherDataId = weatherDataId,
@@ -78,7 +85,6 @@ class WeatherUpdateWorker(
                     }
                     weatherDao.insertWeatherDetails(hourlyDetails)
 
-                    // Lưu dữ liệu daily
                     val dailyDetails = response.daily.time.mapIndexed { index, time ->
                         WeatherDailyDetail(
                             weatherDataId = weatherDataId,
@@ -94,6 +100,37 @@ class WeatherUpdateWorker(
 
                     Log.d("WeatherUpdateWorker", "Lưu ${hourlyDetails.size} WeatherDetail thành công cho ${city.name}")
                     Log.d("WeatherUpdateWorker", "Lưu ${dailyDetails.size} WeatherDailyDetail thành công cho ${city.name}")
+
+                    // Compare with previous data
+                    if (previousData != null) {
+                        val prevDailyDetails = previousData.dailyDetails
+                        dailyDetails.forEach { newDetail ->
+                            val detailDate = LocalDate.parse(newDetail.time, java.time.format.DateTimeFormatter.ISO_LOCAL_DATE)
+                            if (detailDate == today || detailDate == tomorrow) {
+                                val prevDetail = prevDailyDetails.find {
+                                    LocalDate.parse(it.time, java.time.format.DateTimeFormatter.ISO_LOCAL_DATE) == detailDate
+                                }
+                                if (prevDetail != null) {
+                                    val tempMaxDiff = newDetail.temperature_2m_max - prevDetail.temperature_2m_max
+                                    val tempMinDiff = newDetail.temperature_2m_min - prevDetail.temperature_2m_min
+                                    val tempDiff = maxOf(tempMaxDiff, tempMinDiff)
+                                    val precipDiff = newDetail.precipitation_probability_max - prevDetail.precipitation_probability_max
+                                    val weatherCodeChanged = newDetail.weather_code != prevDetail.weather_code
+
+                                    if (tempDiff >= 2f || tempDiff <= -2f || precipDiff >= 10f || precipDiff <= -10f || weatherCodeChanged) {
+                                        val intent = Intent("com.example.weatherapp.WEATHER_DATA_CHANGED")
+                                        intent.putExtra("city_name", city.name)
+                                        intent.putExtra("date", newDetail.time)
+                                        intent.putExtra("temp_diff", tempDiff)
+                                        intent.putExtra("precip_diff", precipDiff)
+                                        intent.putExtra("weather_code_changed", weatherCodeChanged)
+                                        LocalBroadcastManager.getInstance(applicationContext).sendBroadcast(intent)
+                                        Log.d("WeatherUpdateWorker", "Significant weather change detected for ${city.name} on ${newDetail.time}")
+                                    }
+                                }
+                            }
+                        }
+                    }
                 } catch (e: Exception) {
                     Log.e("WeatherUpdateWorker", "Lỗi khi cập nhật dữ liệu cho ${city.name}: ${e.message}", e)
                 }

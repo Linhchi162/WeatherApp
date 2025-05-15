@@ -41,4 +41,4 @@ class WeatherRespone {
         val us_aqi: Int?,
         val pm2_5: Double?
     )
-}
+

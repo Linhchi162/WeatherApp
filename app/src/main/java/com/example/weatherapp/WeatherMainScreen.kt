@@ -1,8 +1,15 @@
 package com.example.weatherapp
 
-import android.content.Context // Import Context
-import android.net.ConnectivityManager // Import ConnectivityManager
-import android.net.NetworkCapabilities // Import NetworkCapabilities
+
+import android.content.BroadcastReceiver
+import android.content.Context
+import android.content.Intent
+import android.content.IntentFilter
+import android.content.SharedPreferences
+import android.net.ConnectivityManager
+import android.net.NetworkCapabilities
+import android.util.Log
+
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -10,42 +17,65 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
+
 import androidx.compose.foundation.lazy.items // Import items for LazyColumn/LazyRow
 import androidx.compose.foundation.shape.CircleShape
+
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
+
 import androidx.compose.ui.geometry.Size // Import Size for Canvas
+
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+
 import androidx.compose.ui.tooling.preview.Preview
+
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.viewmodel.compose.viewModel
+
+import androidx.localbroadcastmanager.content.LocalBroadcastManager
+
 import com.google.accompanist.pager.ExperimentalPagerApi
 import com.google.accompanist.pager.HorizontalPager
 import com.google.accompanist.pager.rememberPagerState
 import com.google.accompanist.swiperefresh.SwipeRefresh
 import com.google.accompanist.swiperefresh.SwipeRefreshIndicator
 import com.google.accompanist.swiperefresh.rememberSwipeRefreshState
+
+import com.google.android.gms.maps.MapView
+import com.google.android.gms.maps.CameraUpdateFactory
+import com.google.android.gms.maps.model.LatLng
+import com.google.android.gms.maps.model.LatLngBounds
+import com.google.android.gms.maps.model.GroundOverlayOptions
+import com.google.android.gms.maps.model.BitmapDescriptorFactory
+import com.google.android.gms.maps.model.GroundOverlay
+import com.google.android.gms.maps.GoogleMap
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
+import java.net.URL
+
 import java.time.Instant
 import java.time.LocalDate
 import java.time.LocalDateTime
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
-import kotlinx.coroutines.launch // Import launch
 
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import kotlin.math.*
 
-
-// Import R if needed (assuming it's in the same package or imported correctly)
-// import com.example.weatherapp.R
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalPagerApi::class)
 @Composable
@@ -54,183 +84,542 @@ fun WeatherMainScreen(
     viewModel: WeatherViewModel = viewModel(
         factory = WeatherViewModelFactory(
             weatherDao = WeatherDatabase.getDatabase(LocalContext.current).weatherDao(),
-            openMeteoService = RetrofitInstance.api, // Đảm bảo dùng đúng instance
-            airQualityService = RetrofitInstance.airQualityApi
+
+            openMeteoService = RetrofitInstance.api,
+            airQualityService = RetrofitInstance.airQualityApi,
+            geoapifyService = RetrofitInstance.geoapifyApi
+
         )
     )
 ) {
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
-    // Sử dụng danh sách thành phố từ viewModel
+
     val cities = viewModel.citiesList
-    val initialPage = remember(cities, viewModel.currentCity) {
-        cities.indexOfFirst { it.name == viewModel.currentCity }.coerceAtLeast(0)
-    }
-    val pagerState = rememberPagerState(initialPage = initialPage)
+    val pagerState = rememberPagerState(initialPage = 0)
 
     var showSearchOverlay by remember { mutableStateOf(false) }
     var showSearchScreen by remember { mutableStateOf(false) }
-    var showWeatherDetailsScreen by remember { mutableStateOf(false) }
-    var showNavBar by remember { mutableStateOf(true) }
-    var showDeleteCityDialog by remember { mutableStateOf(false) }
-    var showFilteredCitiesScreen by remember { mutableStateOf(false) }
     var isRefreshing by remember { mutableStateOf(false) }
     val swipeRefreshState = rememberSwipeRefreshState(isRefreshing)
 
-    // Cập nhật thành phố hiện tại trong ViewModel khi Pager chuyển trang
-    LaunchedEffect(pagerState.currentPage, cities.size) { // Thêm cities.size để cập nhật nếu list thay đổi
-        if (cities.isNotEmpty() && pagerState.currentPage < cities.size) {
-            viewModel.updateCurrentCity(cities[pagerState.currentPage].name)
-        } else if (cities.isEmpty()) {
-            // Xử lý trường hợp không còn thành phố nào
-            // viewModel.updateCurrentCity(null) // Ví dụ
+    val preferences = context.getSharedPreferences("weather_prefs", Context.MODE_PRIVATE)
+    var temperatureUnit by remember { mutableStateOf(UnitConverter.TemperatureUnit.CELSIUS) }
+    var windSpeedUnit by remember { mutableStateOf(UnitConverter.WindSpeedUnit.KMH) }
+    var pressureUnit by remember { mutableStateOf(UnitConverter.PressureUnit.MMHG) }
+    var visibilityUnit by remember { mutableStateOf(UnitConverter.VisibilityUnit.KM) }
+
+    LaunchedEffect(Unit) {
+        temperatureUnit = when (preferences.getString("temperature_unit", "Độ C (°C)")) {
+            "Độ C (°C)" -> UnitConverter.TemperatureUnit.CELSIUS
+            "Độ F (°F)" -> UnitConverter.TemperatureUnit.FAHRENHEIT
+            else -> UnitConverter.TemperatureUnit.CELSIUS
+        }
+        windSpeedUnit = when (preferences.getString("wind_unit", "Kilomet mỗi giờ (km/h)")) {
+            "Kilomet mỗi giờ (km/h)" -> UnitConverter.WindSpeedUnit.KMH
+            "Thang đo Beaufort" -> UnitConverter.WindSpeedUnit.BEAUFORT
+            "Mét mỗi giây (m/s)" -> UnitConverter.WindSpeedUnit.MS
+            "Feet mỗi giây (ft/s)" -> UnitConverter.WindSpeedUnit.FTS
+            "Dặm mỗi giờ (mph)" -> UnitConverter.WindSpeedUnit.MPH
+            "Hải lý mỗi giờ (hải lý)" -> UnitConverter.WindSpeedUnit.KNOTS
+            else -> UnitConverter.WindSpeedUnit.KMH
+        }
+        pressureUnit = when (preferences.getString("pressure_unit", "Millimet thủy ngân (mmHg)")) {
+            "Hectopascal (hPa)" -> UnitConverter.PressureUnit.HPA
+            "Millimet thủy ngân (mmHg)" -> UnitConverter.PressureUnit.MMHG
+            "Inch thủy ngân (inHg)" -> UnitConverter.PressureUnit.INHG
+            "Millibar (mb)" -> UnitConverter.PressureUnit.MB
+            "Pound trên inch vuông (psi)" -> UnitConverter.PressureUnit.PSI
+            else -> UnitConverter.PressureUnit.MMHG
+        }
+        visibilityUnit = when (preferences.getString("visibility_unit", "Kilomet (km)")) {
+            "Kilomet (km)" -> UnitConverter.VisibilityUnit.KM
+            "Dặm (mi)" -> UnitConverter.VisibilityUnit.MI
+            "Mét (m)" -> UnitConverter.VisibilityUnit.M
+            "Feet (ft)" -> UnitConverter.VisibilityUnit.FT
+            else -> UnitConverter.VisibilityUnit.KM
+
+        }
+        Log.d("WeatherMainScreen", "Temperature Unit: $temperatureUnit")
+        Log.d("WeatherMainScreen", "Wind Unit: $windSpeedUnit")
+        Log.d("WeatherMainScreen", "Pressure Unit: $pressureUnit")
+        Log.d("WeatherMainScreen", "Visibility Unit: $visibilityUnit")
+    }
+
+DisposableEffect(Unit) {
+    val receiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context, intent: Intent) {
+            if (intent.action == "com.example.weatherapp.UNIT_CHANGED") {
+                val unitType = intent.getStringExtra("unit_type")
+                val unitValue = intent.getStringExtra("unit_value")
+                Log.d("WeatherMainScreen", "Received unit change: $unitType = $unitValue")
+                when (unitType) {
+                    "Nhiệt độ" -> {
+                        temperatureUnit = when (unitValue) {
+                            "Độ C (°C)" -> UnitConverter.TemperatureUnit.CELSIUS
+                            "Độ F (°F)" -> UnitConverter.TemperatureUnit.FAHRENHEIT
+                            else -> UnitConverter.TemperatureUnit.CELSIUS
+                        }
+                    }
+                    "Gió" -> {
+                        windSpeedUnit = when (unitValue) {
+                            "Kilomet mỗi giờ (km/h)" -> UnitConverter.WindSpeedUnit.KMH
+                            "Thang đo Beaufort" -> UnitConverter.WindSpeedUnit.BEAUFORT
+                            "Mét mỗi giây (m/s)" -> UnitConverter.WindSpeedUnit.MS
+                            "Feet mỗi giây (ft/s)" -> UnitConverter.WindSpeedUnit.FTS
+                            "Dặm mỗi giờ (mph)" -> UnitConverter.WindSpeedUnit.MPH
+                            "Hải lý mỗi giờ (hải lý)" -> UnitConverter.WindSpeedUnit.KNOTS
+                            else -> UnitConverter.WindSpeedUnit.KMH
+                        }
+                    }
+                    "Áp suất không khí" -> {
+                        pressureUnit = when (unitValue) {
+                            "Hectopascal (hPa)" -> UnitConverter.PressureUnit.HPA
+                            "Millimet thủy ngân (mmHg)" -> UnitConverter.PressureUnit.MMHG
+                            "Inch thủy ngân (inHg)" -> UnitConverter.PressureUnit.INHG
+                            "Millibar (mb)" -> UnitConverter.PressureUnit.MB
+                            "Pound trên inch vuông (psi)" -> UnitConverter.PressureUnit.PSI
+                            else -> UnitConverter.PressureUnit.MMHG
+                        }
+                    }
+                    "Tầm nhìn" -> {
+                        visibilityUnit = when (unitValue) {
+                            "Kilomet (km)" -> UnitConverter.VisibilityUnit.KM
+                            "Dặm (mi)" -> UnitConverter.VisibilityUnit.MI
+                            "Mét (m)" -> UnitConverter.VisibilityUnit.M
+                            "Feet (ft)" -> UnitConverter.VisibilityUnit.FT
+                            else -> UnitConverter.VisibilityUnit.KM
+                        }
+                    }
+                }
+            }
         }
     }
 
-    Box(modifier = Modifier.fillMaxSize()) {
-        Scaffold(
-            topBar = {
-                TopBar(
-                    context = context,
-                    onSearchClick = { showSearchOverlay = true }
-                )
-            },
-            containerColor = Color.Transparent,
-            modifier = Modifier.fillMaxSize()
-        ) { innerPadding ->
-            SwipeRefresh(
-                state = swipeRefreshState,
-                onRefresh = {
-                    if (cities.isNotEmpty() && pagerState.currentPage < cities.size) {
-                        isRefreshing = true
-                        coroutineScope.launch {
-                            val currentCityToRefresh = cities[pagerState.currentPage]
-                            viewModel.fetchWeatherAndAirQuality(
-                                currentCityToRefresh.name,
-                                currentCityToRefresh.latitude,
-                                currentCityToRefresh.longitude
-                            )
-                            // Không cần delay cứng, isRefreshing sẽ tự false khi fetch xong (nếu logic ViewModel đúng)
-                            // kotlinx.coroutines.delay(1000)
-                            isRefreshing = false // Nên để ViewModel quản lý trạng thái loading thì tốt hơn
-                        }
-                    } else {
-                        isRefreshing = false // Không có gì để refresh
-                    }
-                },
-                indicator = { state, trigger ->
-                    SwipeRefreshIndicator(
-                        state = state,
-                        refreshTriggerDistance = trigger,
-                        scale = true,
-                        backgroundColor = Color.White,
-                        contentColor = Color(0xFF5372dc),
-                        shape = RoundedCornerShape(50),
-                        largeIndication = true,
-                        modifier = Modifier
-                            .padding(innerPadding) // Áp dụng padding từ Scaffold
-                            .offset(y = 16.dp) // Điều chỉnh vị trí indicator nếu cần
-                            .size(40.dp)
-                    )
-                }
-            ) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .background(
-                            brush = Brush.verticalGradient(
-                                colors = listOf(Color(0xFFcbdfff), Color(0xFFfcdbf6))
-                            )
+    val filter = IntentFilter("com.example.weatherapp.UNIT_CHANGED")
+    LocalBroadcastManager.getInstance(context).registerReceiver(receiver, filter)
+
+    onDispose {
+        LocalBroadcastManager.getInstance(context).unregisterReceiver(receiver)
+    }
+}
+
+LaunchedEffect(pagerState.currentPage, cities.size) {
+    if (cities.isNotEmpty() && pagerState.currentPage < cities.size) {
+        viewModel.updateCurrentCity(cities[pagerState.currentPage].name)
+    }
+}
+
+Box(modifier = Modifier.fillMaxSize()) {
+    Scaffold(
+        topBar = {
+            TopBar(
+                context = context,
+                onSearchClick = { showSearchOverlay = true }
+            )
+        },
+        containerColor = Color.Transparent,
+        modifier = Modifier.fillMaxSize()
+    ) { innerPadding ->
+        SwipeRefresh(
+            state = swipeRefreshState,
+            onRefresh = {
+                if (cities.isNotEmpty() && pagerState.currentPage < cities.size) {
+                    isRefreshing = true
+                    coroutineScope.launch {
+                        val currentCityToRefresh = cities[pagerState.currentPage]
+                        viewModel.fetchWeatherAndAirQuality(
+                            currentCityToRefresh.name,
+                            currentCityToRefresh.latitude,
+                            currentCityToRefresh.longitude
                         )
-                        .padding(innerPadding) // Áp dụng padding từ Scaffold vào đây
-                ) {
-                    if (cities.isEmpty()) {
-                        // Hiển thị thông báo khi không có thành phố nào
-                        Box(
-                            modifier = Modifier.fillMaxSize(),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Text(
-                                text = "Không có thành phố nào. Vui lòng thêm.",
-                                fontSize = 16.sp,
-                                color = Color(0xFF5372dc),
-                                textAlign = TextAlign.Center,
-                                modifier = Modifier.padding(horizontal = 30.dp)
-                            )
-                        }
-                    } else {
-                        HorizontalPager(
-                            count = cities.size,
-                            state = pagerState,
-                            modifier = Modifier.fillMaxSize()
-                        ) { page ->
-                            val city = cities[page]
-                            // Lấy WeatherDataState từ map trong ViewModel
-                            val weatherData = viewModel.weatherDataMap[city.name]
-                            val isNetworkAvailable = isNetworkAvailable(context) // Hàm kiểm tra mạng
+                        isRefreshing = false
+                    }
+                } else {
+                    isRefreshing = false
+                }
+            },
+            indicator = { state, trigger ->
+                SwipeRefreshIndicator(
+                    state = state,
+                    refreshTriggerDistance = trigger,
+                    scale = true,
+                    backgroundColor = Color.White,
+                    contentColor = Color(0xFF5372dc),
+                    shape = RoundedCornerShape(50),
+                    largeIndication = true,
+                    modifier = Modifier
+                        .padding(innerPadding)
+                        .offset(y = 16.dp)
+                        .size(40.dp)
+                )
+            }
+        ) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(
+                        brush = Brush.verticalGradient(
+                            colors = listOf(Color(0xFFcbdfff), Color(0xFFfcdbf6))
+                        )
+                    )
+                    .padding(innerPadding)
+            ) {
+                if (cities.isEmpty()) {
+                    Box(
+                        modifier = Modifier.fillMaxSize(),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = "Không có thành phố nào. Vui lòng thêm.",
+                            fontSize = 16.sp,
+                            color = Color(0xFF5372dc),
+                            textAlign = TextAlign.Center,
+                            modifier = Modifier.padding(horizontal = 30.dp)
+                        )
+                    }
+                } else {
+                    HorizontalPager(
+                        count = cities.size,
+                        state = pagerState,
+                        modifier = Modifier.fillMaxSize()
+                    ) { page ->
+                        val city = cities[page]
+                        val weatherData = viewModel.weatherDataMap[city.name]
+                        val isNetworkAvailable = isNetworkAvailable(context)
 
-                            // --- Các trạng thái hiển thị khác nhau ---
-                            when {
-                                // 1. Không có mạng
-                                !isNetworkAvailable -> {
-                                    // Hiển thị thông báo mất mạng và thời gian cập nhật cuối (nếu có)
-                                    OfflineScreen(lastUpdateTime = weatherData?.lastUpdateTime)
-                                }
-                                // 2. Đang tải hoặc chưa có dữ liệu hoặc có lỗi từ ViewModel
-                                weatherData == null || (weatherData.timeList.isEmpty() && weatherData.dailyTimeList.isEmpty() && weatherData.currentAqi == null) || weatherData.errorMessage != null -> {
-                                    LoadingOrErrorScreen(
-                                        errorMessage = weatherData?.errorMessage,
-                                        lastUpdateTime = weatherData?.lastUpdateTime
-                                    )
-                                }
-                                // 3. Có dữ liệu -> Hiển thị màn hình chính
-                                else -> {
-                                    val currentDate = LocalDate.now()
-                                    val dateFormatter = remember { DateTimeFormatter.ofPattern("E, dd MMM") } // Định dạng ngày thân thiện hơn
-                                    val currentDateStr = remember(currentDate) { currentDate.format(dateFormatter) }
+                        when {
+                            !isNetworkAvailable -> {
+                                OfflineScreen(lastUpdateTime = weatherData?.lastUpdateTime)
+                            }
+                            weatherData == null || (weatherData.timeList.isEmpty() && weatherData.dailyTimeList.isEmpty() && weatherData.currentAqi == null) || weatherData.errorMessage != null -> {
+                                LoadingOrErrorScreen(
+                                    errorMessage = weatherData?.errorMessage,
+                                    lastUpdateTime = weatherData?.lastUpdateTime
+                                )
+                            }
+                            else -> {
+                                val currentDate = LocalDate.now()
+                                val dateFormatter = remember { DateTimeFormatter.ofPattern("E, dd MMM") }
+                                val currentDateStr = remember(currentDate) { currentDate.format(dateFormatter) }
+                                val currentAqi = weatherData.currentAqi
 
-                                    // --- Lấy dữ liệu AQI ---
-                                    val currentAqi = weatherData.currentAqi // Lấy AQI từ state (nullable)
-
-                                    LazyColumn(
-                                        modifier = Modifier
-                                            .fillMaxSize()
-                                            .padding(horizontal = 30.dp),
-                                        verticalArrangement = Arrangement.spacedBy(24.dp),
-                                        contentPadding = PaddingValues(bottom = 30.dp) // Thêm padding dưới cùng
-                                    ) {
-                                        // Phần thông tin thời tiết chính (Nhiệt độ, icon, H/L)
-                                        item { CurrentWeatherSection(city, weatherData, viewModel) }
-
-                                        // Phần thông tin phụ (Mưa, Độ ẩm, Gió)
-                                        item { AdditionalInfoSection(weatherData, viewModel) }
-
-                                        // Phần dự báo theo giờ
-                                        item { HourlyForecastSection(city, weatherData, viewModel, currentDateStr) }
-
-                                        // Phần dự báo theo ngày
-                                        item { DailyForecastSection(city, weatherData, viewModel) }
-
-                                        // --- Phần Chất lượng không khí ---
-                                        item {
-                                            // Truyền currentAqi (nullable) vào AirQualitySection
-                                            AirQualitySection(aqi = currentAqi)
-                                        }
-
-                                        // Phần chi tiết khác (UV, Feels like, ...)
-                                        item { OtherDetailsSection(weatherData, viewModel) }
-
-                                        // Thời gian cập nhật cuối
-                                        item { LastUpdateSection(weatherData) }
-
-                                        // Spacer cuối cùng để tránh bị che khuất
-                                        item { Spacer(modifier = Modifier.height(20.dp)) }
-                                    }
+                                LazyColumn(
+                                    modifier = Modifier
+                                        .fillMaxSize()
+                                        .padding(horizontal = 30.dp),
+                                    verticalArrangement = Arrangement.spacedBy(24.dp),
+                                    contentPadding = PaddingValues(bottom = 30.dp)
+                                ) {
+                                    item { CurrentWeatherSection(city, weatherData, viewModel, temperatureUnit) }
+                                    item { AdditionalInfoSection(weatherData, viewModel, windSpeedUnit) }
+                                    item { HourlyForecastSection(city, weatherData, viewModel, currentDateStr, temperatureUnit) }
+                                    item { DailyForecastSection(city, weatherData, viewModel, temperatureUnit) }
+                                    item { AirQualitySection(aqi = currentAqi) }
+                                    item { OtherDetailsSection(weatherData, viewModel, temperatureUnit, windSpeedUnit, pressureUnit, visibilityUnit) }
+                                    item { WeatherRadarSection(city) }
+                                    item { LastUpdateSection(weatherData) }
+                                    item { Spacer(modifier = Modifier.height(20.dp)) }
                                 }
                             }
                         }
                     }
                 }
+            }
+        }
+    }
+
+    if (showSearchOverlay) {
+        SearchOverlay(
+            onBackClick = { showSearchOverlay = false },
+            onFilterClick = {
+                showSearchOverlay = false
+                showSearchScreen = true
+            },
+            onDismiss = {
+                viewModel.clearSearch()
+                showSearchOverlay = false
+            },
+            viewModel = viewModel
+        )
+    }
+    if (showSearchScreen) {
+        SearchScreen(
+            onBackClick = {
+                showSearchScreen = false
+            },
+            onDismiss = { showSearchScreen = false }
+        )
+    }
+}
+
+fun latLonToTileXY(lat: Double, lon: Double, zoom: Int): Pair<Int, Int> {
+    val latRad = Math.toRadians(lat)
+    val n = 1 shl zoom
+    val xTile = ((lon + 180.0) / 360.0 * n).toInt()
+    val yTile = ((1.0 - ln(tan(latRad) + 1 / cos(latRad)) / PI) / 2.0 * n).toInt()
+    return Pair(xTile, yTile)
+}
+
+fun tileToLatLonBounds(x: Int, y: Int, zoom: Int): LatLngBounds {
+    val n = 1 shl zoom
+    val lonDeg1 = x.toDouble() / n * 360.0 - 180.0
+    val lonDeg2 = (x + 1).toDouble() / n * 360.0 - 180.0
+
+    val latRad1 = atan(sinh(PI * (1 - 2 * y.toDouble() / n)))
+    val latDeg1 = Math.toDegrees(latRad1)
+    val latRad2 = atan(sinh(PI * (1 - 2 * (y + 1).toDouble() / n)))
+    val latDeg2 = Math.toDegrees(latRad2)
+
+    val bounds = LatLngBounds(
+        LatLng(latDeg2, lonDeg1), // Góc Tây Nam
+        LatLng(latDeg1, lonDeg2)  // Góc Đông Bắc
+    )
+
+    Log.d("WeatherRadarSection", "Bounds for tile ($x, $y) at zoom $zoom: SW(${latDeg2}, ${lonDeg1}), NE(${latDeg1}, ${lonDeg2})")
+    return bounds
+}
+
+fun getTilesForViewport(bounds: LatLngBounds, zoom: Int): List<Pair<Int, Int>> {
+    val southwest = bounds.southwest
+    val northeast = bounds.northeast
+
+    val (minX, maxY) = latLonToTileXY(southwest.latitude, southwest.longitude, zoom)
+    val (maxX, minY) = latLonToTileXY(northeast.latitude, northeast.longitude, zoom)
+
+    val tiles = mutableListOf<Pair<Int, Int>>()
+    val n = 1 shl zoom
+
+    for (x in minX..maxX) {
+        for (y in minY..maxY) {
+            val wrappedX = (x + n) % n // Xử lý vòng quanh kinh tuyến 180
+            tiles.add(Pair(wrappedX, y))
+        }
+    }
+
+    Log.d("WeatherRadarSection", "Tiles for viewport at zoom $zoom: $tiles")
+    return tiles
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun WeatherRadarSection(city: City) {
+    val context = LocalContext.current
+    var radarOverlays by remember { mutableStateOf<Map<String, Bitmap?>>(emptyMap()) }
+    var errorMessage by remember { mutableStateOf<String?>(null) }
+    var googleMap by remember { mutableStateOf<GoogleMap?>(null) }
+    var mapView by remember { mutableStateOf<MapView?>(null) }
+    var currentTiles by remember { mutableStateOf<List<Pair<Int, Int>>>(emptyList()) }
+    var currentZoom by remember { mutableStateOf(6) }
+    val overlaysOnMap = remember { mutableMapOf<String, GroundOverlay>() } // Lưu trữ các lớp phủ trên bản đồ
+
+    val openWeatherMapApiKey = "960b4897d630b53c8faeb909817bf31a"
+    var selectedLayer by remember { mutableStateOf("precipitation") }
+    var expanded by remember { mutableStateOf(false) }
+
+    val weatherLayers = listOf(
+        "precipitation" to "Mưa",
+        "clouds" to "Mây",
+        "wind" to "Gió",
+        "temp" to "Nhiệt độ"
+    )
+
+    val transparencyMap = mapOf(
+        "precipitation" to 0.0f,
+        "clouds" to 0.1f,
+        "wind" to 0.3f,
+        "temp" to 0.3f
+    )
+                            }
+                            bitmap
+                        } catch (e: Exception) {
+                            Log.e("WeatherRadarSection", "Error loading layer $layer at tile ($xTile, $yTile): ${e.message}")
+                            errorMessage = "Không thể tải dữ liệu ${weatherLayers.find { it.first == layer }?.second}: ${e.message}"
+                            null
+                        }
+
+                    }
+                    fetchedOverlays[key] = bitmap
+                }
+            }
+        }
+        withContext(Dispatchers.Main) {
+            radarOverlays = radarOverlays + fetchedOverlays
+        }
+    }
+
+    // Thêm lớp phủ vào bản đồ
+    fun addOverlaysToMap(map: GoogleMap, tiles: List<Pair<Int, Int>>, zoom: Int, layers: List<String>) {
+        // Xóa các lớp phủ cũ
+        overlaysOnMap.values.forEach { it.remove() }
+        overlaysOnMap.clear()
+
+        // Thêm các lớp phủ mới
+        tiles.forEach { (xTile, yTile) ->
+            layers.forEach { layer ->
+                val key = "$layer-$zoom-$xTile-$yTile"
+                radarOverlays[key]?.let { bitmap ->
+                    Log.d("WeatherRadarSection", "Adding overlay for layer $layer at tile ($xTile, $yTile)")
+                    val bounds = tileToLatLonBounds(xTile, yTile, zoom)
+                    val transparency = transparencyMap[layer] ?: 0.3f
+                    val overlayOptions = GroundOverlayOptions()
+                        .image(BitmapDescriptorFactory.fromBitmap(bitmap))
+                        .positionFromBounds(bounds)
+                        .transparency(transparency)
+                    val overlay = map.addGroundOverlay(overlayOptions)
+                    overlay?.let {
+                        overlaysOnMap[key] = it
+                    }
+                    mapView?.invalidate()
+                } ?: Log.e("WeatherRadarSection", "Bitmap for layer $layer at tile ($xTile, $yTile) is null")
+            }
+        }
+    }
+
+    LaunchedEffect(googleMap, selectedLayer, currentTiles, currentZoom) {
+        googleMap?.let { map ->
+            val layersToDisplay = listOf(selectedLayer)
+
+            loadOverlaysForTiles(currentTiles, currentZoom, layersToDisplay)
+            addOverlaysToMap(map, currentTiles, currentZoom, layersToDisplay)
+        }
+    }
+
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(Color.White.copy(alpha = 0.4f), shape = RoundedCornerShape(10.dp))
+            .padding(16.dp)
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                "Radar Thời Tiết",
+                fontWeight = FontWeight.Bold,
+                fontSize = 14.sp,
+                color = Color(0xFF5372dc)
+            )
+
+            Box {
+                TextButton(onClick = { expanded = true }) {
+                    Text(
+                        text = weatherLayers.find { it.first == selectedLayer }?.second ?: "Mưa",
+                        color = Color(0xFF5372dc),
+                        fontSize = 14.sp
+                    )
+                }
+                DropdownMenu(
+                    expanded = expanded,
+                    onDismissRequest = { expanded = false }
+                ) {
+                    weatherLayers.forEach { (layer, label) ->
+                        DropdownMenuItem(
+                            text = { Text(label) },
+                            onClick = {
+                                selectedLayer = layer
+                                expanded = false
+                            }
+                        )
+                    }
+                }
+            }
+        }
+        Spacer(modifier = Modifier.height(12.dp))
+
+        if (errorMessage != null) {
+            Text(
+                text = errorMessage!!,
+                fontSize = 14.sp,
+                color = Color.Red.copy(alpha = 0.8f),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 8.dp),
+                textAlign = TextAlign.Center
+            )
+        }
+
+        AndroidView(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(300.dp),
+            factory = { ctx ->
+                MapView(ctx).apply {
+                    onCreate(null)
+                    onStart()
+                    getMapAsync { map ->
+                        val cityLocation = LatLng(city.latitude, city.longitude)
+                        map.moveCamera(CameraUpdateFactory.newLatLngZoom(cityLocation, currentZoom.toFloat()))
+
+                        map.uiSettings.isZoomControlsEnabled = true
+                        map.uiSettings.isScrollGesturesEnabled = true
+                        map.uiSettings.isZoomGesturesEnabled = true
+                        map.uiSettings.isRotateGesturesEnabled = true
+
+                        map.setOnCameraIdleListener {
+                            val zoom = map.cameraPosition.zoom.toInt().coerceIn(3, 10) // Giới hạn zoom để tối ưu
+                            val visibleRegion = map.projection.visibleRegion.latLngBounds
+                            val tiles = getTilesForViewport(visibleRegion, zoom)
+
+                            currentZoom = zoom
+                            currentTiles = tiles
+                        }
+
+                        googleMap = map
+                        mapView = this
+
+                        // Khởi tạo tiles ban đầu
+                        val zoom = map.cameraPosition.zoom.toInt().coerceIn(3, 10)
+                        val visibleRegion = map.projection.visibleRegion.latLngBounds
+                        currentZoom = zoom
+                        currentTiles = getTilesForViewport(visibleRegion, zoom)
+
+                    }
+                }
+            },
+            update = { mv ->
+                mv.getMapAsync { map ->
+                    val cityLocation = LatLng(city.latitude, city.longitude)
+                    map.moveCamera(CameraUpdateFactory.newLatLngZoom(cityLocation, currentZoom.toFloat()))
+                    googleMap = map
+                    mapView = mv
+                }
+            },
+            onRelease = { mv ->
+                mv.onStop()
+                mv.onDestroy()
+                mapView = null
+            }
+        )
+    }
+}
+
+@Composable
+fun OfflineScreen(lastUpdateTime: Long?) {
+    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            Icon(
+                painter = painterResource(id = android.R.drawable.ic_dialog_alert),
+                contentDescription = "Offline",
+                tint = Color(0xFF5372dc),
+                modifier = Modifier.size(48.dp)
+            )
+            Spacer(modifier = Modifier.height(16.dp))
+            Text(
+                text = "Không có kết nối mạng. Vui lòng kiểm tra lại.",
+                fontSize = 16.sp,
+                color = Color(0xFF5372dc),
+                textAlign = TextAlign.Center
+            )
+            lastUpdateTime?.let {
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(
+                    text = "Dữ liệu cập nhật lần cuối: ${formatTimestamp(it)}",
+                    fontSize = 14.sp,
+                    color = Color(0xFF5372dc)
+                )
             }
         }
 
@@ -389,25 +778,122 @@ fun CurrentWeatherSection(city: City, weatherData: WeatherDataState, viewModel: 
 }
 
 @Composable
-fun AdditionalInfoSection(weatherData: WeatherDataState, viewModel: WeatherViewModel) {
-    val index = viewModel.getCurrentIndex(viewModel.currentCity) // Lấy index hiện tại
-    val currentWeatherCode = weatherData.weatherCodeList.getOrNull(index) ?: 0
 
-    // Lấy dữ liệu từ weather state
-    val currentHumidity = weatherData.humidityList.getOrNull(index)?.toInt() ?: 0
-    val currentWindSpeed = weatherData.windSpeedList.getOrNull(index)?.toInt() ?: 0
-    
-    // Điều chỉnh giá trị % mưa nếu thời tiết là mưa/dông mà % mưa thấp
-    val rawPrecipitation = weatherData.dailyPrecipitationList.getOrNull(0)?.toInt() ?: 0 // Dùng tỷ lệ mưa theo ngày
-    val minRainProbability = getMinRainProbabilityForWeatherCode(currentWeatherCode)
-    val adjustedPrecipitation = if (rawPrecipitation < minRainProbability && minRainProbability > 0) 
-                                minRainProbability else rawPrecipitation
+fun LoadingOrErrorScreen(errorMessage: String?, lastUpdateTime: Long?) {
+    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            if (errorMessage != null) {
+                Icon(
+                    painter = painterResource(id = android.R.drawable.ic_dialog_alert),
+                    contentDescription = "Error",
+                    tint = Color.Red.copy(alpha = 0.8f),
+                    modifier = Modifier.size(48.dp)
+                )
+                Spacer(modifier = Modifier.height(16.dp))
+                Text(
+                    text = errorMessage,
+                    fontSize = 16.sp,
+                    color = Color.Red.copy(alpha = 0.8f),
+                    textAlign = TextAlign.Center
+                )
+            } else {
+                CircularProgressIndicator(color = Color(0xFF5372dc))
+                Spacer(modifier = Modifier.height(16.dp))
+                Text(
+                    text = "Đang tải dữ liệu thời tiết...",
+                    fontSize = 16.sp,
+                    color = Color(0xFF5372dc)
+                )
+            }
+            lastUpdateTime?.let {
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(
+                    text = "Dữ liệu cập nhật lần cuối: ${formatTimestamp(it)}",
+                    fontSize = 14.sp,
+                    color = Color(0xFF5372dc).copy(alpha = 0.8f)
+                )
+            }
+        }
+    }
+}
 
-    Card(
+@Composable
+fun CurrentWeatherSection(
+    city: City,
+    weatherData: WeatherDataState,
+    viewModel: WeatherViewModel,
+    temperatureUnit: UnitConverter.TemperatureUnit
+) {
+    val index = remember(city.name, weatherData.timeList) { viewModel.getCurrentIndex(city.name) }
+    val currentTemp = weatherData.temperatureList.getOrNull(index)?.let {
+        UnitConverter.convertTemperature(it, temperatureUnit).toInt()
+    } ?: 0
+    val high = weatherData.dailyTempMaxList.firstOrNull()?.let {
+        UnitConverter.convertTemperature(it, temperatureUnit).toInt()
+    } ?: weatherData.temperatureList.maxOrNull()?.let {
+        UnitConverter.convertTemperature(it, temperatureUnit).toInt()
+    } ?: 0
+    val low = weatherData.dailyTempMinList.firstOrNull()?.let {
+        UnitConverter.convertTemperature(it, temperatureUnit).toInt()
+    } ?: weatherData.temperatureList.minOrNull()?.let {
+        UnitConverter.convertTemperature(it, temperatureUnit).toInt()
+    } ?: 0
+    val weatherCode = weatherData.weatherCodeList.getOrNull(index) ?: 0
+    val weatherIcon = getWeatherIcon(weatherCode)
+    val weatherText = getWeatherDescription(weatherCode)
+    val tempUnitSymbol = if (temperatureUnit == UnitConverter.TemperatureUnit.CELSIUS) "°C" else "°F"
+
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Column {
+            Text(city.name, fontSize = 24.sp, fontWeight = FontWeight.Medium, color = Color(0xFF5372dc))
+            Spacer(modifier = Modifier.height(4.dp))
+            Text(
+                "$currentTemp$tempUnitSymbol",
+                fontSize = 70.sp,
+                fontWeight = FontWeight.Bold,
+                color = Color(0xFF5372dc)
+            )
+            Text(weatherText, fontSize = 16.sp, color = Color(0xFF5372dc))
+            Spacer(modifier = Modifier.height(6.dp))
+            Text(
+                "Cao: $high$tempUnitSymbol   Thấp: $low$tempUnitSymbol",
+                fontWeight = FontWeight.Medium,
+                fontSize = 14.sp,
+                color = Color(0xFF5372dc)
+            )
+        }
+        Image(
+            painter = painterResource(id = weatherIcon),
+            contentDescription = weatherText,
+            modifier = Modifier.size(150.dp)
+        )
+    }
+}
+
+@Composable
+fun AdditionalInfoSection(
+    weatherData: WeatherDataState,
+    viewModel: WeatherViewModel,
+    windSpeedUnit: UnitConverter.WindSpeedUnit
+) {
+    val index = remember(weatherData.timeList) { viewModel.getCurrentIndex(viewModel.currentCity) }
+    val precipitation = weatherData.precipitationList.getOrNull(index)?.toInt() ?: 0
+    val humidity = weatherData.humidityList.getOrNull(index)?.toInt() ?: 0
+    val windSpeed = weatherData.windSpeedList.getOrNull(index)?.let {
+        UnitConverter.convertWindSpeed(it, windSpeedUnit)
+    } ?: "0"
+
+    Row(
+
         modifier = Modifier
             .fillMaxWidth()
             .background(Color.White.copy(alpha = 0.4f), shape = RoundedCornerShape(50))
             .padding(horizontal = 20.dp, vertical = 16.dp),
+
         elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
     ) {
         Row(
@@ -419,16 +905,19 @@ fun AdditionalInfoSection(weatherData: WeatherDataState, viewModel: WeatherViewM
             InfoItem(R.drawable.humidity, "$currentHumidity%", "Độ ẩm", Color(0xFFD05CA2))
             InfoItem(R.drawable.wind_speed, "${currentWindSpeed}km/h", "Gió", Color(0xFF3F9CBE))
         }
+
     }
 }
 
 @Composable
+
 fun HourlyForecastSection(city: City, weatherData: WeatherDataState, viewModel: WeatherViewModel, currentDateStr: String) {
     Column(
         modifier = Modifier
             .fillMaxWidth()
             .background(Color.White.copy(alpha = 0.4f), shape = RoundedCornerShape(10.dp)) // Bo góc ít hơn
             .padding(16.dp) // Giảm padding chút
+
     ) {
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -437,36 +926,36 @@ fun HourlyForecastSection(city: City, weatherData: WeatherDataState, viewModel: 
             Text("Hôm nay", fontWeight = FontWeight.Bold, fontSize = 14.sp, color = Color(0xFF5372dc))
             Text(currentDateStr, fontWeight = FontWeight.Bold, fontSize = 14.sp, color = Color(0xFF5372dc))
         }
-        Spacer(modifier = Modifier.height(12.dp)) // Tăng khoảng cách chút
+        Spacer(modifier = Modifier.height(12.dp))
 
         val upcoming = remember(city.name, weatherData.timeList) { viewModel.getUpcomingForecast(city.name) }
         val currentIndex = remember(city.name, weatherData.timeList) { viewModel.getCurrentIndex(city.name) }
+        val tempUnitSymbol = if (temperatureUnit == UnitConverter.TemperatureUnit.CELSIUS) "°C" else "°F"
 
         if (upcoming.isNotEmpty()) {
             LazyRow(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(16.dp) // Tăng khoảng cách giữa các item
+                horizontalArrangement = Arrangement.spacedBy(16.dp)
             ) {
                 items(upcoming) { (timeStr, temp, weatherCode) ->
                     val time = remember(timeStr) { LocalDateTime.parse(timeStr, DateTimeFormatter.ISO_LOCAL_DATE_TIME) }
                     val formattedTime = remember(time) { time.format(DateTimeFormatter.ofPattern("HH:mm")) }
-                    // Xác định xem item này có phải là giờ hiện tại không
                     val isCurrentHour = remember(time, currentIndex, upcoming) {
                         try {
                             upcoming.getOrNull(currentIndex)?.first == timeStr
                         } catch (e: Exception) { false }
                     }
+                    val convertedTemp = UnitConverter.convertTemperature(temp, temperatureUnit).toInt()
 
                     ForecastItem(
                         iconId = getWeatherIcon(weatherCode),
-                        temp = "${temp.toInt()}°", // Bỏ C
+                        temp = "$convertedTemp$tempUnitSymbol",
                         time = formattedTime,
-                        highlight = isCurrentHour // Highlight giờ hiện tại
+                        highlight = isCurrentHour
                     )
                 }
             }
         } else {
-            // Hiển thị nếu không có dữ liệu dự báo giờ
             Box(modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp), contentAlignment = Alignment.Center) {
                 Text(text = "Không có dữ liệu dự báo theo giờ.", fontSize = 14.sp, color = Color(0xFF5372dc))
             }
@@ -475,7 +964,12 @@ fun HourlyForecastSection(city: City, weatherData: WeatherDataState, viewModel: 
 }
 
 @Composable
-fun DailyForecastSection(city: City, weatherData: WeatherDataState, viewModel: WeatherViewModel) {
+fun DailyForecastSection(
+    city: City,
+    weatherData: WeatherDataState,
+    viewModel: WeatherViewModel,
+    temperatureUnit: UnitConverter.TemperatureUnit
+) {
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -485,14 +979,13 @@ fun DailyForecastSection(city: City, weatherData: WeatherDataState, viewModel: W
         Text("Dự báo hàng ngày", fontWeight = FontWeight.Bold, fontSize = 14.sp, color = Color(0xFF5372dc))
         Spacer(modifier = Modifier.height(8.dp))
 
-        val dailyForecastData = remember(city.name, weatherData.dailyTimeList) { viewModel.getDailyForecast(city.name, 7) } // Lấy 7 ngày
+        val dailyForecastData = remember(city.name, weatherData.dailyTimeList) { viewModel.getDailyForecast(city.name, 7) }
+        val tempUnitSymbol = if (temperatureUnit == UnitConverter.TemperatureUnit.CELSIUS) "°C" else "°F"
 
         if (dailyForecastData.isNotEmpty()) {
-            // Không dùng LazyColumn lồng trong LazyColumn, dùng Column đơn giản
             Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 dailyForecastData.forEachIndexed { index, (time, temps, weatherCode) ->
                     val date = remember(time) { LocalDate.parse(time, DateTimeFormatter.ISO_LOCAL_DATE) }
-                    // Định dạng ngày: Thứ, ngày (vd: T2, 18) hoặc Hôm nay/Ngày mai
                     val formattedDate = remember(date) {
                         when (date) {
                             LocalDate.now() -> "Hôm nay"
@@ -501,11 +994,13 @@ fun DailyForecastSection(city: City, weatherData: WeatherDataState, viewModel: W
                         }
                     }
                     val precipitation = weatherData.dailyPrecipitationList.getOrNull(index)?.toInt() ?: 0
+                    val maxTemp = UnitConverter.convertTemperature(temps.first, temperatureUnit).toInt()
+                    val minTemp = UnitConverter.convertTemperature(temps.second, temperatureUnit).toInt()
 
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(vertical = 10.dp), // Tăng padding dọc
+                            .padding(vertical = 10.dp),
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
@@ -513,34 +1008,32 @@ fun DailyForecastSection(city: City, weatherData: WeatherDataState, viewModel: W
                             formattedDate,
                             color = Color(0xFF5372dc),
                             fontWeight = FontWeight.Medium,
-                            modifier = Modifier.weight(0.3f) // Phân bổ không gian
+                            modifier = Modifier.weight(0.3f)
                         )
                         Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(0.2f)) {
                             Image(
                                 painter = painterResource(id = getWeatherIcon(weatherCode)),
                                 contentDescription = null,
-                                modifier = Modifier.size(28.dp) // Icon nhỏ hơn chút
+                                modifier = Modifier.size(28.dp)
                             )
                             Spacer(modifier = Modifier.width(4.dp))
                             Text(
                                 "$precipitation%",
-                                color = Color(0xFF5372DC).copy(alpha=0.8f),
-                                fontSize = 12.sp // Cỡ chữ nhỏ hơn
+                                color = Color(0xFF5372DC).copy(alpha = 0.8f),
+                                fontSize = 12.sp
                             )
                         }
-
                         Text(
-                            "${temps.second.toInt()}°", // Nhiệt độ thấp
-                            color = Color(0xFF5372dc).copy(alpha = 0.7f), // Màu nhạt hơn
+                            "$minTemp$tempUnitSymbol",
+                            color = Color(0xFF5372dc).copy(alpha = 0.7f),
                             modifier = Modifier.weight(0.2f),
-                            textAlign = TextAlign.End // Căn phải
+                            textAlign = TextAlign.End
                         )
-                        // Có thể thêm thanh progress bar nhỏ thể hiện khoảng nhiệt độ
                         Text(
-                            "${temps.first.toInt()}°", // Nhiệt độ cao
+                            "$maxTemp$tempUnitSymbol",
                             color = Color(0xFF5372dc),
-                            modifier = Modifier.weight(0.2f), // Giảm weight
-                            textAlign = TextAlign.End // Căn phải
+                            modifier = Modifier.weight(0.2f),
+                            textAlign = TextAlign.End
                         )
                     }
                     if (index < dailyForecastData.size - 1) {
@@ -556,19 +1049,17 @@ fun DailyForecastSection(city: City, weatherData: WeatherDataState, viewModel: W
     }
 }
 
-// --- Cập nhật AirQualitySection ---
 @Composable
-fun AirQualitySection(aqi: Int?) { // Chấp nhận Int? (nullable)
+fun AirQualitySection(aqi: Int?) {
     Column(
         modifier = Modifier
-            .fillMaxWidth() // Sửa thành fillMaxWidth
+            .fillMaxWidth()
             .background(Color.White.copy(alpha = 0.4f), shape = RoundedCornerShape(10.dp))
-            .padding(16.dp) // Giảm padding
+            .padding(16.dp)
     ) {
         Text("Chất lượng không khí", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = Color(0xFF5372DC))
-        Spacer(modifier = Modifier.height(12.dp)) // Tăng khoảng cách
+        Spacer(modifier = Modifier.height(12.dp))
 
-        // Kiểm tra nếu aqi là null
         if (aqi == null) {
             Text(
                 text = "Thông tin chất lượng không khí không có sẵn.",
@@ -576,6 +1067,7 @@ fun AirQualitySection(aqi: Int?) { // Chấp nhận Int? (nullable)
                 color = Color(0xFF5372DC).copy(alpha = 0.8f)
             )
         } else {
+
             // Nếu aqi không null, hiển thị như cũ
             val (description, color, percentage) = remember(aqi) { getAqiInfo(aqi) } // Dùng remember
 
@@ -587,6 +1079,7 @@ fun AirQualitySection(aqi: Int?) { // Chấp nhận Int? (nullable)
             Spacer(modifier = Modifier.height(8.dp))
             Text(
                 text = getAqiRecommendation(description), // Hàm lấy khuyến nghị
+
                 fontSize = 13.sp,
                 color = Color(0xFF5372DC)
             )
@@ -595,6 +1088,7 @@ fun AirQualitySection(aqi: Int?) { // Chấp nhận Int? (nullable)
         }
     }
 }
+
 
 
 @Composable
@@ -620,10 +1114,12 @@ fun OtherDetailsSection(weatherData: WeatherDataState, viewModel: WeatherViewMod
                     .fillMaxWidth()
                     .padding(vertical = 8.dp), // Thêm padding dọc giữa các hàng
                 horizontalArrangement = Arrangement.spacedBy(16.dp) // Khoảng cách giữa các cột
+
             ) {
                 rowItems.forEach { (iconId, label, value) ->
                     Column(
                         modifier = Modifier
+
                             .weight(1f) // Chia đều không gian
                             .height(100.dp) // Giảm chiều cao chút
                             .background(Color.White.copy(alpha = 0.4f), shape = RoundedCornerShape(10.dp))
@@ -638,15 +1134,18 @@ fun OtherDetailsSection(weatherData: WeatherDataState, viewModel: WeatherViewMod
                         )
                         Spacer(modifier = Modifier.height(8.dp)) // Tăng khoảng cách
                         Text(label, color = Color(0xFF5372DC).copy(alpha = 0.8f), fontSize = 12.sp, textAlign = TextAlign.Center) // Căn giữa text
+
                         Text(
                             value,
                             color = Color(0xFF5372DC),
                             fontWeight = FontWeight.Bold,
+
                             fontSize = 14.sp // Tăng cỡ chữ giá trị
                         )
                     }
                 }
                 // Nếu hàng chỉ có 1 item (trường hợp list lẻ), thêm Spacer để đẩy item đó sang trái
+
                 if (rowItems.size == 1) {
                     Spacer(modifier = Modifier.weight(1f))
                 }
@@ -661,7 +1160,9 @@ fun LastUpdateSection(weatherData: WeatherDataState) {
         Text(
             text = "Cập nhật lần cuối: ${formatTimestamp(it)}",
             fontSize = 12.sp,
-            color = Color(0xFF5372dc).copy(alpha = 0.7f), // Màu nhạt hơn
+
+            color = Color(0xFF5372dc).copy(alpha = 0.7f),
+
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(vertical = 8.dp),
@@ -669,6 +1170,7 @@ fun LastUpdateSection(weatherData: WeatherDataState) {
         )
     }
 }
+
 
 
 // --- Các Composable phụ trợ (InfoItem, ForecastItem, AirQualityBar, getAqiInfo) ---
@@ -684,6 +1186,7 @@ fun InfoItem(iconId: Int, value: String, label: String, color: Color) { // Thêm
         Spacer(modifier = Modifier.height(4.dp))
         Text(value, color = color, fontSize = 14.sp, fontWeight = FontWeight.Bold)
         Text(label, color = color.copy(alpha = 0.8f), fontSize = 11.sp) // Thêm label nhỏ bên dưới
+
     }
 }
 
@@ -693,6 +1196,7 @@ fun ForecastItem(iconId: Int, temp: String, time: String, highlight: Boolean = f
         horizontalAlignment = Alignment.CenterHorizontally,
         modifier = Modifier
             .background(
+
                 color = if (highlight) Color.White.copy(alpha = 0.6f) else Color.Transparent, // Nổi bật hơn
                 shape = RoundedCornerShape(12.dp) // Bo góc nhiều hơn
             )
@@ -707,6 +1211,7 @@ fun ForecastItem(iconId: Int, temp: String, time: String, highlight: Boolean = f
             modifier = Modifier.size(32.dp)) // Icon lớn hơn
         Spacer(modifier = Modifier.height(6.dp)) // Tăng khoảng cách
         Text(temp, fontSize = 14.sp, color = Color(0xFF5372dc), fontWeight = FontWeight.Bold) // Tăng cỡ chữ nhiệt độ
+
     }
 }
 
@@ -720,24 +1225,25 @@ fun AirQualityBar(percentage: Float) {
     val indicatorWidth = 4.dp
     val indicatorHeight = barHeight + 4.dp
 
-    // Sử dụng BoxWithConstraints để lấy chiều rộng tối đa
-    BoxWithConstraints( // <--- THAY ĐỔI Ở ĐÂY
+
+    BoxWithConstraints(
+
         modifier = Modifier
             .fillMaxWidth()
             .height(indicatorHeight),
         contentAlignment = Alignment.CenterStart
     ) {
-        // maxWidth đã có sẵn trong scope này (kiểu Dp)
+
         val maxWidthDp = this.maxWidth
 
-        // Thanh màu gradient
+
         Canvas(
             modifier = Modifier
                 .fillMaxWidth()
                 .height(barHeight)
                 .align(Alignment.CenterStart)
         ) {
-            // size.width (pixels) có sẵn trong Canvas
+
             val segmentWidth = size.width / barColors.size
             barColors.forEachIndexed { i, color ->
                 drawRect(
@@ -748,14 +1254,14 @@ fun AirQualityBar(percentage: Float) {
             }
         }
 
-        // Indicator (vạch trắng)
-        // Tính toán offset dựa trên maxWidthDp (kiểu Dp)
+
         val indicatorOffsetDp = (maxWidthDp * percentage - indicatorWidth / 2)
-            .coerceIn(0.dp, maxWidthDp - indicatorWidth) // Đảm bảo offset nằm trong giới hạn
+            .coerceIn(0.dp, maxWidthDp - indicatorWidth)
 
         Box(
             modifier = Modifier
-                .offset(x = indicatorOffsetDp) // Áp dụng offset Dp
+                .offset(x = indicatorOffsetDp)
+
                 .width(indicatorWidth)
                 .height(indicatorHeight)
                 .background(Color.White, shape = RoundedCornerShape(2.dp))
@@ -765,10 +1271,6 @@ fun AirQualityBar(percentage: Float) {
 }
 
 
-// --- Hàm tiện ích ---
-
-// Hàm lấy thông tin AQI (giữ nguyên hoặc cải tiến)
-
 fun getAqiInfo(aqi: Int): Triple<String, Color, Float> {
     return when (aqi) {
         in 0..50 -> Triple("Tốt", Color(0xFF6BD56B), calculatePercentage(aqi, 0, 50, 6))
@@ -777,6 +1279,88 @@ fun getAqiInfo(aqi: Int): Triple<String, Color, Float> {
         in 151..200 -> Triple("Không tốt", Color(0xFFD34444), calculatePercentage(aqi, 151, 200, 6))
         in 201..300 -> Triple("Rất không tốt", Color(0xFF8F3F97), calculatePercentage(aqi, 201, 300, 6))
         else -> Triple("Nguy hiểm", Color(0xFF7E0023), calculatePercentage(aqi, 301, 500, 6))
+
+    }
+}
+
+fun calculatePercentage(value: Int, minRange: Int, maxRange: Int, totalSegments: Int): Float {
+    val segmentIndex = when {
+        value <= 50 -> 0
+        value <= 100 -> 1
+        value <= 150 -> 2
+        value <= 200 -> 3
+        value <= 300 -> 4
+        else -> 5
+    }
+    val valueInRange = value.coerceIn(minRange, maxRange)
+    val rangeSize = (maxRange - minRange).toFloat().coerceAtLeast(1f)
+    val positionInSegment = (valueInRange - minRange) / rangeSize
+    val segmentWidthPercentage = 1f / totalSegments
+    return (segmentIndex * segmentWidthPercentage) + (positionInSegment * segmentWidthPercentage)
+}
+
+fun getAqiRecommendation(description: String): String {
+    return when (description) {
+        "Tốt" -> "Chất lượng không khí rất tốt. Tận hưởng các hoạt động ngoài trời!"
+        "Trung bình" -> "Chất lượng không khí chấp nhận được. Nhóm nhạy cảm nên cân nhắc giảm hoạt động mạnh ngoài trời."
+        "Không tốt cho nhóm nhạy cảm" -> "Người có vấn đề hô hấp, tim mạch, người già, trẻ em nên hạn chế ra ngoài."
+        "Không tốt" -> "Mọi người có thể bị ảnh hưởng sức khỏe, nhóm nhạy cảm có thể bị ảnh hưởng nghiêm trọng. Hạn chế ra ngoài."
+        "Rất không tốt" -> "Cảnh báo sức khỏe nghiêm trọng. Mọi người nên tránh các hoạt động ngoài trời."
+        "Nguy hiểm" -> "Cảnh báo khẩn cấp về sức khỏe. Mọi người nên ở trong nhà."
+        else -> "Không có Metalloin khuyến nghị."
+    }
+}
+
+@Composable
+fun getWeatherIcon(code: Int): Int {
+    return remember(code) {
+        when (code) {
+            0 -> R.drawable.sunny
+            1 -> R.drawable.cloudy_with_sun
+            2 -> R.drawable.cloudy_with_sun
+            3 -> R.drawable.cloudy
+            45, 48 -> R.drawable.cloudy
+            51, 53, 55 -> R.drawable.rainingg
+            56, 57 -> R.drawable.rainingg
+            61, 63, 65 -> R.drawable.rainingg
+            66, 67 -> R.drawable.rainingg
+            71, 73, 75 -> R.drawable.snow
+            77 -> R.drawable.snow
+            80, 81, 82 -> R.drawable.rainingg
+            85, 86 -> R.drawable.snow
+            95 -> R.drawable.thunderstorm
+            96, 99 -> R.drawable.thunderstorm
+            else -> R.drawable.cloudy_with_sun
+        }
+    }
+}
+
+fun getWeatherDescription(code: Int): String {
+    return when (code) {
+        0 -> "Trời quang"
+        1 -> "Nắng nhẹ"
+        2 -> "Mây rải rác"
+        3 -> "Nhiều mây"
+        45, 48 -> "Sương mù"
+        51, 53, 55 -> "Mưa phùn"
+        56, 57 -> "Mưa phùn đông đá"
+        61 -> "Mưa nhỏ"
+        63 -> "Mưa vừa"
+        65 -> "Mưa to"
+        66, 67 -> "Mưa đông đá"
+        71 -> "Tuyết rơi nhẹ"
+        73 -> "Tuyết rơi vừa"
+        75 -> "Tuyết rơi dày"
+        77 -> "Hạt tuyết"
+        80 -> "Mưa rào nhẹ"
+        81 -> "Mưa rào vừa"
+        82 -> "Mưa rào dữ dội"
+        85 -> "Mưa tuyết nhẹ"
+        86 -> "Mưa tuyết nặng"
+        95 -> "Dông"
+        96, 99 -> "Dông có mưa đá"
+        else -> "Không xác định"
+
     }
 }
 
@@ -909,7 +1493,7 @@ fun isNetworkAvailable(context: Context): Boolean {
             capabilities.hasTransport(NetworkCapabilities.TRANSPORT_ETHERNET)
 }
 
-// Hàm định dạng timestamp (ví dụ)
+
 fun formatTimestamp(timestamp: Long): String {
     return try {
         Instant.ofEpochMilli(timestamp)

@@ -17,15 +17,19 @@ import java.time.format.DateTimeFormatter
 import android.util.Log
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.isActive
+
 import kotlin.math.pow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 
+
 data class City(
     val name: String,
     val latitude: Double,
+
     val longitude: Double,
     val country: String? = null
+
 )
 
 data class WeatherDataState(
@@ -63,6 +67,7 @@ class WeatherViewModel(
     private val weatherDao: WeatherDao,
     private val openMeteoService: OpenMeteoService, // Service for weather forecast
     private val airQualityService: AirQualityService, // Service for air quality
+
     private val geoNamesService: GeoNamesService = RetrofitInstance.geoNamesApi // Service for GeoNames
 ) : ViewModel() {
     // Hằng số cho debug log
@@ -75,10 +80,12 @@ class WeatherViewModel(
             City("Hà Nội", 21.0285, 105.8542, "Việt Nam"),
             City("TP. Hồ Chí Minh", 10.7769, 106.7009, "Việt Nam"),
             City("Đà Nẵng", 16.0544, 108.2022, "Việt Nam")
+
         )
     )
 
     var weatherDataMap: Map<String, WeatherDataState> by mutableStateOf(emptyMap())
+
         private set
 
     var currentCity: String by mutableStateOf(cities.firstOrNull()?.name ?: "Hà Nội")
@@ -110,7 +117,16 @@ class WeatherViewModel(
     var filteredCities by mutableStateOf<List<City>>(emptyList())
         private set
     var isFiltering by mutableStateOf(false)
+
         private set
+    private var searchJob: Job? = null // Job để quản lý coroutine tìm kiếm (cho debounce)
+
+    init {
+        cities.forEach { city ->
+            fetchWeatherForCity(city.name, city.latitude, city.longitude)
+        }
+    }
+
 
     init {
         cities.forEach { city ->
@@ -198,6 +214,7 @@ class WeatherViewModel(
             } else {
                 Log.w("WeatherViewModel", "City not found for deletion: $cityNameToDelete")
             }
+
         }
     }
 
@@ -653,6 +670,154 @@ class WeatherViewModel(
 
         return newState
     }
+    private suspend fun processApiResponse( // Đánh dấu suspend vì có thể gọi hàm IO bên trong (dù hiện tại không gọi)
+        cityName: String,
+        weatherResp: WeatherRespone.WeatherResponse?,
+        aqiResp: AirQualityResponse?,
+        error: Exception?
+    ): WeatherDataState {
+        val currentState = weatherDataMap[cityName] ?: WeatherDataState() // Get current state or create new
+        val newState = WeatherDataState() // Start with a fresh state object
+        var weatherDbSaved = false // Flag to check if weather data was saved to DB
+
+        // Process and Save Weather Data (if successful)
+        if (weatherResp != null && weatherResp.hourly != null && weatherResp.daily != null) {
+            try {
+                // Save to DB first (in IO context)
+                // Giả sử bạn có hàm get latitude/longitude từ cityName nếu cần, hoặc lấy từ tham số
+                val cityInfo = cities.find { it.name == cityName } // Tìm lại city để lấy lat/lon
+                val latitude = cityInfo?.latitude ?: 0.0 // Cần lat/lon để lưu WeatherData
+                val longitude = cityInfo?.longitude ?: 0.0
+
+                val weatherDataId = withContext(Dispatchers.IO) {
+                    val weatherData = WeatherData(
+                        cityName = cityName, latitude = latitude, longitude = longitude,
+                        lastUpdated = System.currentTimeMillis()
+                    )
+                    weatherDao.insertWeatherData(weatherData)
+                }
+
+                // Save hourly details
+                withContext(Dispatchers.IO) {
+                    val hourlyDetails = weatherResp.hourly.time?.mapIndexedNotNull { index, time ->
+                        // Safe mapping with index and null checks for all required lists
+                        val temp = weatherResp.hourly.temperature_2m?.getOrNull(index)
+                        val code = weatherResp.hourly.weathercode?.getOrNull(index)
+                        val precip = weatherResp.hourly.precipitation?.getOrNull(index)
+                        val humid = weatherResp.hourly.relative_humidity_2m?.getOrNull(index)
+                        val wind = weatherResp.hourly.windspeed_10m?.getOrNull(index)
+                        val uv = weatherResp.hourly.uv_index?.getOrNull(index)
+                        val feels = weatherResp.hourly.apparent_temperature?.getOrNull(index)
+                        val pressure = weatherResp.hourly.surface_pressure?.getOrNull(index) // surface_pressure
+                        val vis = weatherResp.hourly.visibility?.getOrNull(index)
+
+                        if (time != null && temp != null && code != null && precip != null && humid != null && wind != null && uv != null && feels != null && pressure != null && vis != null) {
+                            WeatherDetail(
+                                weatherDataId = weatherDataId, cityName = cityName, time = time,
+                                temperature_2m = temp, weather_code = code, precipitation_probability = precip,
+                                relative_humidity_2m = humid, wind_speed_10m = wind, uv_index = uv,
+                                apparent_temperature = feels, surface_pressure = pressure, visibility = vis
+                            )
+                        } else {
+                            Log.w("WeatherViewModel", "Incomplete hourly data at index $index for $cityName")
+                            null
+                        }
+                    }
+                    if (!hourlyDetails.isNullOrEmpty()) weatherDao.insertWeatherDetails(hourlyDetails)
+                }
+
+                // Save daily details
+                withContext(Dispatchers.IO) {
+                    val dailyDetails = weatherResp.daily.time?.mapIndexedNotNull { index, time ->
+                        // Safe mapping with index and null checks
+                        val maxT = weatherResp.daily.temperature_2m_max?.getOrNull(index)
+                        val minT = weatherResp.daily.temperature_2m_min?.getOrNull(index)
+                        val code = weatherResp.daily.weathercode?.getOrNull(index)
+                        val precip = weatherResp.daily.precipitation_probability_max?.getOrNull(index)
+
+                        if (time != null && maxT != null && minT != null && code != null && precip != null) {
+                            WeatherDailyDetail(
+                                weatherDataId = weatherDataId, cityName = cityName, time = time,
+                                temperature_2m_max = maxT, temperature_2m_min = minT,
+                                weather_code = code, precipitation_probability_max = precip
+                            )
+                        } else {
+                            Log.w("WeatherViewModel", "Incomplete daily data at index $index for $cityName")
+                            null
+                        }
+                    }
+                    if (!dailyDetails.isNullOrEmpty()) weatherDao.insertWeatherDailyDetails(dailyDetails)
+                }
+                weatherDbSaved = true // Mark as saved if no DB error
+                Log.d("WeatherViewModel", "Weather data saved to DB for $cityName")
+
+                // Populate newState from the successful response (no need to read back from DB immediately)
+                newState.timeList = weatherResp.hourly.time ?: emptyList()
+                newState.temperatureList = weatherResp.hourly.temperature_2m?.mapNotNull { it } ?: emptyList()
+                newState.weatherCodeList = weatherResp.hourly.weathercode?.mapNotNull { it } ?: emptyList()
+                newState.precipitationList = weatherResp.hourly.precipitation?.mapNotNull { it } ?: emptyList()
+                newState.humidityList = weatherResp.hourly.relative_humidity_2m?.mapNotNull { it } ?: emptyList()
+                newState.windSpeedList = weatherResp.hourly.windspeed_10m?.mapNotNull { it } ?: emptyList()
+                newState.uvList = weatherResp.hourly.uv_index?.mapNotNull { it } ?: emptyList()
+                newState.feelsLikeList = weatherResp.hourly.apparent_temperature?.mapNotNull { it } ?: emptyList()
+                newState.pressureList = weatherResp.hourly.surface_pressure?.mapNotNull { it } ?: emptyList()
+                newState.visibilityList = weatherResp.hourly.visibility?.mapNotNull { it } ?: emptyList()
+                newState.dailyTimeList = weatherResp.daily.time ?: emptyList()
+                newState.dailyTempMaxList = weatherResp.daily.temperature_2m_max?.mapNotNull { it } ?: emptyList()
+                newState.dailyTempMinList = weatherResp.daily.temperature_2m_min?.mapNotNull { it } ?: emptyList()
+                newState.dailyWeatherCodeList = weatherResp.daily.weathercode?.mapNotNull { it } ?: emptyList()
+                newState.dailyPrecipitationList = weatherResp.daily.precipitation_probability_max?.mapNotNull { it } ?: emptyList()
+                newState.lastUpdateTime = System.currentTimeMillis()
+
+
+            } catch (e: Exception) {
+                Log.e("WeatherViewModel", "Error saving weather data to DB for $cityName", e)
+                // If DB save failed, try to keep old data
+                newState.copyWeatherFieldsFrom(currentState)
+                // Maybe set a specific DB error message?
+                newState.errorMessage = "Lỗi lưu trữ dữ liệu thời tiết."
+            }
+        } else {
+            // Keep old weather data if fetch failed
+            newState.copyWeatherFieldsFrom(currentState)
+            Log.w("WeatherViewModel", "Weather response null or incomplete for $cityName, keeping old weather data if available.")
+        }
+
+        // Process Air Quality Data
+        if (aqiResp != null && aqiResp.current != null) {
+            newState.currentAqi = aqiResp.current.us_aqi
+            newState.currentPm25 = aqiResp.current.pm2_5
+            // Update lastUpdateTime if AQI is newer or weather failed/wasn't saved
+            if (!weatherDbSaved || newState.lastUpdateTime == null) {
+                newState.lastUpdateTime = System.currentTimeMillis()
+            }
+        } else {
+            // Keep old AQI data if fetch failed
+            newState.currentAqi = currentState.currentAqi
+            newState.currentPm25 = currentState.currentPm25
+            Log.w("WeatherViewModel", "AirQuality response null or incomplete for $cityName, keeping old AQI data if available.")
+        }
+
+        // Final error handling
+        if (error != null && !weatherDbSaved && newState.currentAqi == null) {
+            // Only show fetch error if nothing was successful
+            newState.errorMessage = "Lỗi tải dữ liệu: ${error.message}"
+        } else if (newState.timeList.isEmpty() && newState.dailyTimeList.isEmpty() && newState.currentAqi == null && error == null) {
+            // No error, but no data
+            newState.errorMessage = "Không có dữ liệu."
+        } else if (error == null && (newState.timeList.isNotEmpty() || newState.dailyTimeList.isNotEmpty() || newState.currentAqi != null)) {
+            // Has some data and no fetch error
+            newState.errorMessage = null // Clear previous errors if data is now available
+        }
+        // If there was a DB error but fetch was okay, errorMessage might already be set
+
+        // Ensure last update time is carried over if nothing new was fetched at all
+        if (newState.lastUpdateTime == null) {
+            newState.lastUpdateTime = currentState.lastUpdateTime
+        }
+
+        return newState
+    }
 
 
     /** Helper function to copy weather fields from one state to another */
@@ -701,6 +866,51 @@ class WeatherViewModel(
         val data = weatherDataMap[cityName] ?: return 0
         if (data.timeList.isEmpty()) return 0 // Tránh lỗi nếu list rỗng
 
+/** Helper function to copy weather fields from one state to another */
+private fun WeatherDataState.copyWeatherFieldsFrom(source: WeatherDataState) {
+    this.timeList = source.timeList
+    this.temperatureList = source.temperatureList
+    this.weatherCodeList = source.weatherCodeList
+    this.precipitationList = source.precipitationList
+    this.humidityList = source.humidityList
+    this.windSpeedList = source.windSpeedList
+    this.uvList = source.uvList
+    this.feelsLikeList = source.feelsLikeList
+    this.pressureList = source.pressureList
+    this.visibilityList = source.visibilityList
+    this.dailyTimeList = source.dailyTimeList
+    this.dailyTempMaxList = source.dailyTempMaxList
+    this.dailyTempMinList = source.dailyTempMinList
+    this.dailyWeatherCodeList = source.dailyWeatherCodeList
+    this.dailyPrecipitationList = source.dailyPrecipitationList
+    // Do not copy AQI fields or lastUpdateTime or errorMessage here
+}
+
+
+/** Helper to update state for a city to show loading (clears error) */
+private fun updateStateWithLoading(cityName: String) {
+    val currentState = weatherDataMap[cityName] ?: WeatherDataState()
+    // Create a new state that keeps old data but sets error to null (loading)
+    // Or maybe add an explicit isLoading flag to WeatherDataState?
+    // For now, just ensure error is cleared before fetch starts.
+    val loadingState = currentState.copy(errorMessage = null) // Keep old data, clear error
+
+    weatherDataMap = weatherDataMap.toMutableMap().apply {
+        put(cityName, loadingState)
+    }
+}
+
+
+fun updateCurrentCity(cityName: String) {
+    currentCity = cityName
+}
+
+val citiesList: List<City>
+    get() = cities
+
+fun getCurrentIndex(cityName: String): Int {
+    val data = weatherDataMap[cityName] ?: return 0
+    if (data.timeList.isEmpty()) return 0 // Tránh lỗi nếu list rỗng
         val now = LocalDateTime.now()
         val index = data.timeList.indexOfLast { time ->
             try {
@@ -767,11 +977,13 @@ class WeatherViewModel(
     }
 
     // Hàm được gọi khi text trong ô tìm kiếm thay đổi
+
     fun onSearchQueryChanged(query: String, type: String = "city") {
         searchQuery = query
         searchJob?.cancel() // Hủy job tìm kiếm cũ nếu có
 
         if (query.length < 2) { // Sửa từ 3 xuống 2 ký tự
+
             placeSuggestions = emptyList()
             isSearching = false
             searchError = null
@@ -782,6 +994,7 @@ class WeatherViewModel(
         searchError = null // Xóa lỗi cũ
 
         searchJob = viewModelScope.launch {
+
             delay(100L) // Debounce: Chờ 100ms sau khi người dùng ngừng gõ mới tìm kiếm (tăng tốc)
             try {
                 // Chuyển đổi thành một tìm kiếm đơn giản bằng GeoNames
@@ -815,6 +1028,7 @@ class WeatherViewModel(
                 else 
                     null
 
+
             } catch (e: Exception) {
                 Log.e("WeatherViewModel", "Lỗi tìm kiếm địa điểm: ${e.message}", e)
                 searchError = "Lỗi khi tìm kiếm: ${e.message}"
@@ -833,6 +1047,7 @@ class WeatherViewModel(
         searchError = null
         searchJob?.cancel()
     }
+
 
     // Lấy mô tả thời tiết từ mã thời tiết
     private fun getWeatherDescription(code: Int): String {
@@ -1247,4 +1462,5 @@ class WeatherViewModel(
     fun fetchCitiesByCountry(country: String) {
         fetchCitiesByCountryWithGeoNames(country)
     }
+
 }

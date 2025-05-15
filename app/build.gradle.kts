@@ -9,6 +9,7 @@ android {
     namespace = "com.example.weatherapp"
     compileSdk = 35
 
+
     defaultConfig {
         applicationId = "com.example.weatherapp"
         minSdk = 26
@@ -78,6 +79,14 @@ dependencies {
     implementation ("androidx.compose.material:material:1.5.0") // Đảm bảo bạn có phiên bản Compose Material
     implementation ("com.google.accompanist:accompanist-swiperefresh:0.27.0")
     implementation ("com.google.accompanist:accompanist-pager:0.25.1")
+
+    implementation ("androidx.localbroadcastmanager:localbroadcastmanager:1.0.0")
+    implementation("com.squareup.okhttp3:logging-interceptor:4.12.0")
+    implementation ("com.google.android.gms:play-services-maps:18.2.0")
+    implementation ("io.coil-kt:coil-compose:2.4.0")
+
+    implementation ("androidx.glance:glance-appwidget:1.0.0")
+
     implementation ("com.google.accompanist:accompanist-pager-indicators:0.25.1")
 
     implementation ("androidx.compose.ui:ui:1.6.4")

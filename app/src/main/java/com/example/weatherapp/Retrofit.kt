@@ -28,6 +28,15 @@ object RetrofitInstance {
             .build()
     }
 
+
+    // 3. Specific Client for Geoapify (can reuse base client if config is identical)
+    private val geoapifyHttpClient: OkHttpClient by lazy {
+        baseOkHttpClient.newBuilder()
+            // Add other specific interceptors if needed for Geoapify
+            .build()
+    }
+
+
     // --- Retrofit Instances ---
 
     /**
@@ -42,6 +51,18 @@ object RetrofitInstance {
             .addConverterFactory(GsonConverterFactory.create())
             .build()
             .create(OpenMeteoService::class.java)
+    }
+
+    /**
+     * Retrofit instance for Geoapify Geocoding API.
+     */
+    val geoapifyApi: GeoapifyService by lazy {
+        Retrofit.Builder()
+            .baseUrl("https://api.geoapify.com/")
+            .client(geoapifyHttpClient) // Sử dụng client Geoapify
+            .addConverterFactory(GsonConverterFactory.create())
+            .build()
+            .create(GeoapifyService::class.java)
     }
 
     /**
@@ -69,6 +90,17 @@ object RetrofitInstance {
     }
 
     // --- API Keys ---
+    // IMPORTANT: Store API keys securely!
+    const val GEOAPIFY_API_KEY = "183500a3f01b45a5b6076845dae351b3"
     // GeoNames username (acts as API key)
     const val GEONAMES_USERNAME = "lilchee" // Tài khoản GeoNames của người dùng
+
+    // --- KHÔNG CÒN DÙNG INSTANCE 'api' CŨ NÀY NỮA ---
+    // val api: OpenMeteoService by lazy {
+    //     Retrofit.Builder()
+    //         .baseUrl("https://api.open-meteo.com/")
+    //         .addConverterFactory(GsonConverterFactory.create())
+    //         .build()
+    //         .create(OpenMeteoService::class.java)
+    // }
 }

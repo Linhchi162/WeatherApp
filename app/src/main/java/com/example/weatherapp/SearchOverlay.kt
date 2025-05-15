@@ -161,8 +161,10 @@ fun SearchOverlay(
                                             val newCity = City(
                                                 name = cityName,
                                                 latitude = suggestion.latitude,
+
                                                 longitude = suggestion.longitude,
                                                 country = suggestion.country // Thêm thông tin quốc gia
+
                                             )
                                             viewModel.addCity(newCity) // Thêm thành phố vào ViewModel
                                             // ViewModel sẽ tự gọi clearSearch trong addCity

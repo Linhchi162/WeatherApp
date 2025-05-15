@@ -1,5 +1,6 @@
 package com.example.weatherapp
 
+
 import android.util.Log
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -21,6 +22,7 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
+
 import androidx.compose.ui.zIndex
 import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.rememberScrollState
@@ -31,6 +33,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.Dispatchers
 
+
 @Composable
 fun SearchScreen(
     onBackClick: () -> Unit,
@@ -38,6 +41,7 @@ fun SearchScreen(
     onShowFilteredResults: () -> Unit,
     viewModel: WeatherViewModel
 ) {
+    var cityName by remember { mutableStateOf("") }
     var temperatureRange by remember { mutableStateOf(-20f..50f) }
     var windSpeedRange by remember { mutableStateOf(0f..100f) }
     var humidityRange by remember { mutableStateOf(0f..100f) }
@@ -197,7 +201,7 @@ fun SearchScreen(
             modifier = Modifier
                 .fillMaxWidth()
                 .fillMaxHeight(fraction = 0.8f)
-                .background(
+                .background
                     brush = Brush.verticalGradient(
                         colors = listOf(Color(0xFFcbdfff), Color(0xFFfcdbf6))
                     ),
@@ -226,6 +230,7 @@ fun SearchScreen(
                     fontWeight = FontWeight.Bold,
                     color = Color(0xFF5372dc)
                 )
+
                 Spacer(modifier = Modifier.width(48.dp))
             }
 
@@ -375,7 +380,9 @@ fun SearchScreen(
             RangeSlider(
                 value = temperatureRange,
                 onValueChange = { temperatureRange = it },
+
                 valueRange = -20f..50f,
+
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(bottom = 16.dp),
@@ -396,7 +403,9 @@ fun SearchScreen(
             RangeSlider(
                 value = windSpeedRange,
                 onValueChange = { windSpeedRange = it },
+
                 valueRange = 0f..100f,
+
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(bottom = 16.dp),
@@ -481,6 +490,7 @@ fun SearchScreen(
 
             // Nút áp dụng bộ lọc
             Button(
+
                 onClick = {
                     // Hiện loading screen
                     isLoading = true
@@ -504,6 +514,7 @@ fun SearchScreen(
                         onShowFilteredResults() // Hiển thị màn hình kết quả lọc
                     }
                 },
+
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(50.dp),
@@ -519,12 +530,4 @@ fun SearchScreen(
     }
 }
 
-//@Preview(showBackground = true, heightDp = 800, widthDp = 400)
-//@Composable
-//fun SearchScreenPreview() {
-//    SearchScreen(
-//        onBackClick = {},
-//        onDismiss = {},
-//        viewModel = WeatherViewModel()
-//    )
-//}
+
