@@ -350,6 +350,21 @@ fun CurrentWeatherSection(city: City, weatherData: WeatherDataState, viewModel: 
     val weatherIcon = getWeatherIcon(weatherCode) // Hàm lấy icon từ code
     val weatherText = getWeatherDescription(weatherCode) // Hàm lấy mô tả thời tiết
 
+    // Đảm bảo hiển thị tỷ lệ mưa đúng cho các mã thời tiết dông/mưa
+    val adjustedRainPercentage = remember(weatherCode) {
+        when {
+            // Nếu là mã thời tiết dông/mưa rào/mưa to mà xác suất mưa < 30% thì điều chỉnh
+            (weatherCode in 95..99 || weatherCode in 80..82 || weatherCode in 61..67) && 
+              (weatherData.dailyPrecipitationList.getOrNull(index)?.toInt() ?: 0) < 30 -> 
+                max(weatherData.dailyPrecipitationList.getOrNull(index)?.toInt() ?: 0, 60)  // Tối thiểu 60% cho dông
+            else -> weatherData.dailyPrecipitationList.getOrNull(index)?.toInt() ?: 0
+        }
+    }
+    
+    // Khi hiển thị phần mưa, dùng giá trị đã điều chỉnh
+    // Tìm đến phần hiển thị % mưa và thay thế bằng giá trị đã điều chỉnh
+    val precipitationText = if (weatherCode in 51..67 || weatherCode in 80..82) "$adjustedRainPercentage%" else ""
+
     Row(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.SpaceBetween,
@@ -375,22 +390,35 @@ fun CurrentWeatherSection(city: City, weatherData: WeatherDataState, viewModel: 
 
 @Composable
 fun AdditionalInfoSection(weatherData: WeatherDataState, viewModel: WeatherViewModel) {
-    val index = remember(weatherData.timeList) { viewModel.getCurrentIndex(viewModel.currentCity) } // Lấy index cho thành phố hiện tại
-    val precipitation = weatherData.precipitationList.getOrNull(index)?.toInt() ?: 0
-    val humidity = weatherData.humidityList.getOrNull(index)?.toInt() ?: 0
-    val windSpeed = weatherData.windSpeedList.getOrNull(index)?.toInt() ?: 0
+    val index = viewModel.getCurrentIndex(viewModel.currentCity) // Lấy index hiện tại
+    val currentWeatherCode = weatherData.weatherCodeList.getOrNull(index) ?: 0
 
-    Row(
+    // Lấy dữ liệu từ weather state
+    val currentHumidity = weatherData.humidityList.getOrNull(index)?.toInt() ?: 0
+    val currentWindSpeed = weatherData.windSpeedList.getOrNull(index)?.toInt() ?: 0
+    
+    // Điều chỉnh giá trị % mưa nếu thời tiết là mưa/dông mà % mưa thấp
+    val rawPrecipitation = weatherData.dailyPrecipitationList.getOrNull(0)?.toInt() ?: 0 // Dùng tỷ lệ mưa theo ngày
+    val minRainProbability = getMinRainProbabilityForWeatherCode(currentWeatherCode)
+    val adjustedPrecipitation = if (rawPrecipitation < minRainProbability && minRainProbability > 0) 
+                                minRainProbability else rawPrecipitation
+
+    Card(
         modifier = Modifier
             .fillMaxWidth()
             .background(Color.White.copy(alpha = 0.4f), shape = RoundedCornerShape(50))
             .padding(horizontal = 20.dp, vertical = 16.dp),
-        horizontalArrangement = Arrangement.SpaceAround, // Phân bố đều hơn
-        verticalAlignment = Alignment.CenterVertically
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
     ) {
-        InfoItem(R.drawable.rain_dropp, "$precipitation%", "Mưa", Color(0xFF5372DC))
-        InfoItem(R.drawable.humidity, "$humidity%", "Độ ẩm", Color(0xFFD05CA2))
-        InfoItem(R.drawable.wind_speed, "${windSpeed}km/h", "Gió", Color(0xFF3F9CBE))
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceAround, // Phân bố đều hơn
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            InfoItem(R.drawable.rain_dropp, "$adjustedPrecipitation%", "Mưa", Color(0xFF5372DC))
+            InfoItem(R.drawable.humidity, "$currentHumidity%", "Độ ẩm", Color(0xFFD05CA2))
+            InfoItem(R.drawable.wind_speed, "${currentWindSpeed}km/h", "Gió", Color(0xFF3F9CBE))
+        }
     }
 }
 
@@ -790,12 +818,18 @@ fun getAqiRecommendation(description: String): String {
 // Hàm lấy icon thời tiết (giữ nguyên hoặc cải tiến)
 @Composable
 fun getWeatherIcon(code: Int): Int {
+    // Kiểm tra thời gian hiện tại
+    val isNightTime = remember {
+        val currentHour = java.time.LocalTime.now().hour
+        currentHour < 6 || currentHour >= 18 // Đêm từ 18:00 đến 6:00
+    }
+    
     // Nên dùng remember
-    return remember(code) {
+    return remember(code, isNightTime) {
         when (code) {
-            0 -> R.drawable.sunny // Nắng rõ
-            1 -> R.drawable.cloudy_with_sun // Nắng nhẹ, mây ít
-            2 -> R.drawable.cloudy_with_sun // Mây rải rác
+            0 -> if (isNightTime) R.drawable.clear_night else R.drawable.sunny // Nắng rõ
+            1 -> if (isNightTime) R.drawable.clear_night else R.drawable.cloudy_with_sun // Nắng nhẹ
+            2 -> if (isNightTime) R.drawable.cloudy_night else R.drawable.cloudy_with_sun // Mây rải rác
             3 -> R.drawable.cloudy // Nhiều mây, u ám
             45, 48 -> R.drawable.cloudy // Sương mù
             51, 53, 55 -> R.drawable.rainingg // Mưa phùn
@@ -806,9 +840,9 @@ fun getWeatherIcon(code: Int): Int {
             77 -> R.drawable.snow // Hạt tuyết (hiếm) -> dùng tạm icon tuyết
             80, 81, 82 -> R.drawable.rainingg // Mưa rào (nhẹ, vừa, dữ dội)
             85, 86 -> R.drawable.snow // Mưa tuyết (nhẹ, nặng)
-            95 -> R.drawable.thunderstorm // Dông (nhẹ/vừa) - cần icon dông riêng
-            96, 99 -> R.drawable.thunderstorm // Dông có mưa đá (nhẹ/nặng) - cần icon dông riêng
-            else -> R.drawable.cloudy_with_sun // Mặc định
+            95 -> R.drawable.thunderstorm // Dông (nhẹ/vừa)
+            96, 99 -> R.drawable.thunderstorm // Dông có mưa đá (nhẹ/nặng)
+            else -> if (isNightTime) R.drawable.cloudy_night else R.drawable.cloudy_with_sun // Mặc định
         }
     }
 }
@@ -842,6 +876,27 @@ fun getWeatherDescription(code: Int): String {
     }
 }
 
+// Thêm hàm mới để lấy xác suất mưa tương ứng với mã thời tiết
+fun getMinRainProbabilityForWeatherCode(code: Int): Int {
+    return when (code) {
+        0, 1 -> 0  // Trời quang, nắng nhẹ
+        2, 3 -> 5  // Mây rải rác, nhiều mây
+        45, 48 -> 20  // Sương mù
+        51, 53, 55 -> 50  // Mưa phùn
+        56, 57 -> 60  // Mưa phùn đông đá
+        61 -> 65  // Mưa nhỏ
+        63 -> 75  // Mưa vừa
+        65 -> 85  // Mưa to
+        66, 67 -> 70  // Mưa đông đá
+        71, 73, 75, 77 -> 60  // Tuyết
+        80 -> 60  // Mưa rào nhẹ
+        81 -> 75  // Mưa rào vừa
+        82 -> 85  // Mưa rào dữ dội
+        85, 86 -> 70  // Mưa tuyết
+        95, 96, 99 -> 80  // Dông
+        else -> 0
+    }
+}
 
 // Hàm kiểm tra mạng (giữ nguyên)
 @Composable

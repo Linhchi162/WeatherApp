@@ -38,13 +38,33 @@ fun FilteredCitiesScreen(
     var loadingTimeoutReached by remember { mutableStateOf(false) }
     
     // Danh sách thành phố để hiển thị (sử dụng filteredCities thay vì citiesList)
-    val displayCities = viewModel.filteredCities
+    val allFilteredCities = viewModel.filteredCities
+    
+    // Lọc các thành phố theo trạng thái thời tiết
+    val displayCities = remember(allFilteredCities, viewModel.weatherDataMap, viewModel.weatherStateFilter) {
+        if (viewModel.weatherStateFilter == "Tất cả") {
+            allFilteredCities
+        } else {
+            allFilteredCities.filter { city ->
+                val data = viewModel.weatherDataMap[city.name]
+                if (data != null && data.timeList.isNotEmpty()) {
+                    val index = viewModel.getCurrentIndex(city.name)
+                    val weatherCode = data.weatherCodeList.getOrNull(index) ?: 0
+                    val description = getFilteredWeatherDescription(weatherCode)
+                    val timeString = data.timeList.getOrNull(index) ?: ""
+                    doesWeatherMatchFilter(description, viewModel.weatherStateFilter, timeString)
+                } else {
+                    true // Giữ lại các thành phố đang tải dữ liệu
+                }
+            }
+        }
+    }
     
     Log.d("FilteredCitiesScreen", "Opening FilteredCitiesScreen with ${displayCities.size} filtered cities")
     
     // Kiểm tra nếu có thành phố chưa có dữ liệu thời tiết
-    LaunchedEffect(displayCities) {
-        isLoadingData = displayCities.any { city ->
+    LaunchedEffect(allFilteredCities) {
+        isLoadingData = allFilteredCities.any { city ->
             viewModel.weatherDataMap[city.name] == null || 
             viewModel.weatherDataMap[city.name]?.timeList?.isEmpty() == true
         }
@@ -55,7 +75,7 @@ fun FilteredCitiesScreen(
         // Tự động tải dữ liệu thời tiết cho các thành phố chưa có dữ liệu
         if (isLoadingData) {
             Log.d("FilteredCitiesScreen", "Some cities missing weather data, loading data...")
-            displayCities.forEach { city ->
+            allFilteredCities.forEach { city ->
                 if (viewModel.weatherDataMap[city.name] == null || 
                     viewModel.weatherDataMap[city.name]?.timeList?.isEmpty() == true) {
                     Log.d("FilteredCitiesScreen", "Fetching weather for ${city.name}")
@@ -70,7 +90,7 @@ fun FilteredCitiesScreen(
                 delay(500)
                 
                 // Cập nhật trạng thái loading
-                isLoadingData = displayCities.any { city ->
+                isLoadingData = allFilteredCities.any { city ->
                     viewModel.weatherDataMap[city.name] == null || 
                     viewModel.weatherDataMap[city.name]?.timeList?.isEmpty() == true
                 }
@@ -190,10 +210,13 @@ fun FilteredCitiesScreen(
                 ),
                 shape = RoundedCornerShape(12.dp)
             ) {
-                Row(
+                Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(16.dp),
+                        .padding(16.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
@@ -238,7 +261,8 @@ fun FilteredCitiesScreen(
                         Text(
                             text = "Lọc lại",
                             fontSize = 12.sp
-                        )
+                            )
+                        }
                     }
                 }
             }
@@ -302,18 +326,36 @@ fun FilteredCitiesScreen(
                         )
                         Spacer(modifier = Modifier.height(16.dp))
                         Text(
-                            text = "Không có thành phố nào phù hợp với bộ lọc",
+                            text = if (viewModel.weatherStateFilter != "Tất cả") 
+                                "Không có thành phố nào có thời tiết \"${viewModel.weatherStateFilter}\""
+                            else
+                                "Không có thành phố nào phù hợp với bộ lọc",
                             fontSize = 16.sp,
                             color = Color(0xFF5372dc),
                             textAlign = TextAlign.Center
                         )
                         Spacer(modifier = Modifier.height(8.dp))
                         Text(
-                            text = "Hãy thử điều chỉnh bộ lọc hoặc thêm thành phố mới",
+                            text = if (viewModel.weatherStateFilter != "Tất cả")
+                                "Hãy tắt chế độ \"Chỉ hiện thành phố có thời tiết ${viewModel.weatherStateFilter}\" hoặc thử điều chỉnh bộ lọc"
+                            else
+                                "Hãy thử điều chỉnh bộ lọc hoặc thêm thành phố mới",
                             fontSize = 14.sp,
                             color = Color(0xFF5372dc).copy(alpha = 0.8f),
                             textAlign = TextAlign.Center
                         )
+                        
+                        if (viewModel.weatherStateFilter != "Tất cả") {
+                            Spacer(modifier = Modifier.height(16.dp))
+                            Button(
+                                onClick = { viewModel.updateFilters(weatherState = "Tất cả") },
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = Color(0xFF5372dc)
+                                )
+                            ) {
+                                Text("Xem tất cả trạng thái thời tiết")
+                            }
+                        }
                     }
                 }
             } else if (loadingTimeoutReached && displayCities.all { city ->
@@ -373,8 +415,48 @@ fun FilteredCitiesScreen(
                                 val currentWeatherCode = weatherData.weatherCodeList.getOrNull(index) ?: 0
                                 val currentHumidity = weatherData.humidityList.getOrNull(index)?.toInt() ?: 0
                                 val currentWindSpeed = weatherData.windSpeedList.getOrNull(index)?.toInt() ?: 0
-
-                                Row(
+                                val weatherDescription = getFilteredWeatherDescription(currentWeatherCode)
+                                val matchesFilter = doesWeatherMatchFilter(weatherDescription, viewModel.weatherStateFilter, weatherData.timeList.getOrNull(index) ?: "")
+                                
+                                // Thêm background mờ nếu không khớp bộ lọc
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .background(
+                                            if (!matchesFilter && viewModel.weatherStateFilter != "Tất cả") 
+                                                Color.Gray.copy(alpha = 0.1f)
+                                            else 
+                                                Color.Transparent
+                                        )
+                                ) {
+                                    Column(
+                                        modifier = Modifier.fillMaxWidth()
+                                    ) {
+                                        if (!matchesFilter && viewModel.weatherStateFilter != "Tất cả") {
+                                            Row(
+                                                modifier = Modifier
+                                                    .fillMaxWidth()
+                                                    .background(Color.Red.copy(alpha = 0.1f))
+                                                    .padding(horizontal = 16.dp, vertical = 4.dp),
+                                                verticalAlignment = Alignment.CenterVertically
+                                            ) {
+                                                Icon(
+                                                    painter = painterResource(id = android.R.drawable.ic_dialog_info),
+                                                    contentDescription = "Cảnh báo",
+                                                    tint = Color.Red.copy(alpha = 0.7f),
+                                                    modifier = Modifier.size(16.dp)
+                                                )
+                                                Spacer(modifier = Modifier.width(8.dp))
+                                                Text(
+                                                    text = "Thành phố này có thời tiết là \"$weatherDescription\" không khớp với bộ lọc \"${viewModel.weatherStateFilter}\"",
+                                                    fontSize = 12.sp,
+                                                    color = Color.Red.copy(alpha = 0.7f),
+                                                    fontStyle = FontStyle.Italic
+                                                )
+                                            }
+                                        }
+                                
+                                        Row(
                                     modifier = Modifier
                                         .fillMaxWidth()
                                         .padding(16.dp),
@@ -386,21 +468,21 @@ fun FilteredCitiesScreen(
                                             text = city.name,
                                             fontSize = 18.sp,
                                             fontWeight = FontWeight.Bold,
-                                            color = Color(0xFF5372dc)
+                                                    color = Color(0xFF5372dc).copy(alpha = if (!matchesFilter && viewModel.weatherStateFilter != "Tất cả") 0.6f else 1f)
                                         )
                                         // Hiển thị quốc gia nếu có
                                         if (!city.country.isNullOrBlank()) {
                                             Text(
                                                 text = city.country,
                                                 fontSize = 14.sp,
-                                                color = Color(0xFF5372dc).copy(alpha = 0.8f),
+                                                        color = Color(0xFF5372dc).copy(alpha = if (!matchesFilter && viewModel.weatherStateFilter != "Tất cả") 0.5f else 0.8f),
                                                 fontStyle = FontStyle.Italic
                                             )
                                         }
                                         Text(
-                                            text = getFilteredWeatherDescription(currentWeatherCode),
+                                                    text = weatherDescription,
                                             fontSize = 14.sp,
-                                            color = Color(0xFF5372dc),
+                                                    color = Color(0xFF5372dc).copy(alpha = if (!matchesFilter && viewModel.weatherStateFilter != "Tất cả") 0.5f else 1f),
                                             style = TextStyle.Default,
                                             onTextLayout = {}
                                         )
@@ -410,17 +492,17 @@ fun FilteredCitiesScreen(
                                         Text(
                                             text = "Nhiệt độ: ${currentTemp}°C",
                                             fontSize = 12.sp,
-                                            color = Color(0xFF5372dc).copy(alpha = 0.8f)
+                                                    color = Color(0xFF5372dc).copy(alpha = if (!matchesFilter && viewModel.weatherStateFilter != "Tất cả") 0.5f else 0.8f)
                                         )
                                         Text(
                                             text = "Độ ẩm: ${currentHumidity}%",
                                             fontSize = 12.sp,
-                                            color = Color(0xFF5372dc).copy(alpha = 0.8f)
+                                                    color = Color(0xFF5372dc).copy(alpha = if (!matchesFilter && viewModel.weatherStateFilter != "Tất cả") 0.5f else 0.8f)
                                         )
                                         Text(
                                             text = "Tốc độ gió: ${currentWindSpeed} km/h",
                                             fontSize = 12.sp,
-                                            color = Color(0xFF5372dc).copy(alpha = 0.8f)
+                                                    color = Color(0xFF5372dc).copy(alpha = if (!matchesFilter && viewModel.weatherStateFilter != "Tất cả") 0.5f else 0.8f)
                                         )
 
                                         // Thêm các thông số khác từ weatherData nếu có
@@ -428,7 +510,7 @@ fun FilteredCitiesScreen(
                                             Text(
                                                 text = "Chỉ số AQI: $aqi (${getAqiDescription(aqi)})",
                                                 fontSize = 12.sp,
-                                                color = Color(0xFF5372dc).copy(alpha = 0.8f)
+                                                        color = Color(0xFF5372dc).copy(alpha = if (!matchesFilter && viewModel.weatherStateFilter != "Tất cả") 0.5f else 0.8f)
                                             )
                                         }
 
@@ -436,19 +518,33 @@ fun FilteredCitiesScreen(
                                             Text(
                                                 text = "Chỉ số UV: ${uvIndex.toInt()} (${getUvDescription(uvIndex.toInt())})",
                                                 fontSize = 12.sp,
-                                                color = Color(0xFF5372dc).copy(alpha = 0.8f)
+                                                        color = Color(0xFF5372dc).copy(alpha = if (!matchesFilter && viewModel.weatherStateFilter != "Tất cả") 0.5f else 0.8f)
                                             )
                                         }
                                     }
                                     Column(horizontalAlignment = Alignment.End) {
                                         // Hiển thị icon thời tiết
-                                        val weatherIcon = getWeatherIcon(currentWeatherCode)
+                                                val weatherIcon = getFilteredWeatherIcon(currentWeatherCode)
+                                                // Kiểm tra xem thời tiết hiện tại có phù hợp với bộ lọc hay không
+                                                val matchesFilter = doesWeatherMatchFilter(weatherDescription, viewModel.weatherStateFilter, weatherData.timeList.getOrNull(index) ?: "")
+                                                
                                         Icon(
                                             painter = painterResource(id = weatherIcon),
-                                            contentDescription = getFilteredWeatherDescription(currentWeatherCode),
-                                            tint = Color(0xFF5372dc),
+                                                    contentDescription = weatherDescription,
+                                                    tint = if (matchesFilter) Color(0xFF5372dc) else Color(0xFF5372dc).copy(alpha = 0.5f),
                                             modifier = Modifier.size(40.dp)
                                         )
+                                                
+                                                if (!matchesFilter && viewModel.weatherStateFilter != "Tất cả") {
+                                                    Text(
+                                                        text = "Không khớp bộ lọc",
+                                                        fontSize = 10.sp,
+                                                        color = Color.Red.copy(alpha = 0.7f),
+                                                        fontStyle = FontStyle.Italic
+                                                    )
+                                                }
+                                            }
+                                        }
                                     }
                                 }
                             } else {
@@ -527,14 +623,19 @@ fun getFilteredWeatherDescription(code: Int): String {
 }
 
 // Thêm các hàm tiện ích mới
-fun getWeatherIcon(weatherCode: Int): Int {
-    return when {
-        weatherCode == 0 || weatherCode == 1 -> android.R.drawable.ic_menu_compass // Trời quang/nắng
-        weatherCode == 2 || weatherCode == 3 -> android.R.drawable.ic_menu_crop // Mây
-        weatherCode in 45..48 -> android.R.drawable.ic_menu_myplaces // Sương mù
-        weatherCode in 51..67 -> android.R.drawable.stat_notify_sync // Mưa
-        weatherCode in 71..86 -> android.R.drawable.presence_offline // Tuyết
-        weatherCode in 95..99 -> android.R.drawable.ic_dialog_alert // Dông
+fun getFilteredWeatherIcon(weatherCode: Int): Int {
+    return when (weatherCode) {
+        0 -> android.R.drawable.ic_menu_compass // Trời quang
+        1 -> android.R.drawable.ic_menu_compass // Nắng nhẹ
+        2 -> android.R.drawable.ic_menu_crop // Mây rải rác
+        3 -> android.R.drawable.ic_menu_crop // Nhiều mây
+        45, 48 -> android.R.drawable.ic_menu_myplaces // Sương mù
+        in 51..57 -> android.R.drawable.stat_notify_sync // Mưa phùn
+        in 61..67 -> android.R.drawable.stat_notify_sync // Mưa
+        in 71..77 -> android.R.drawable.presence_offline // Tuyết
+        in 80..82 -> android.R.drawable.stat_notify_sync // Mưa rào
+        85, 86 -> android.R.drawable.presence_offline // Mưa tuyết
+        95, 96, 99 -> android.R.drawable.ic_dialog_alert // Dông
         else -> android.R.drawable.ic_menu_help // Không xác định
     }
 }
@@ -558,4 +659,40 @@ fun getUvDescription(uv: Int): String {
         uv <= 10 -> "Rất cao"
         else -> "Cực đoan"
     }
+}
+
+// Hàm kiểm tra xem thời tiết có khớp với bộ lọc không
+fun doesWeatherMatchFilter(weatherDescription: String, weatherFilter: String, timeString: String = ""): Boolean {
+    if (weatherFilter == "Tất cả") return true
+    
+    // Kiểm tra thời gian trong ngày cho thời tiết "Nắng"
+    if (weatherFilter == "Nắng" && timeString.isNotEmpty()) {
+        try {
+            // Lấy giờ từ chuỗi thời gian ISO (format: "2023-04-20T14:00")
+            val hourOfDay = timeString.substringAfterLast("T").substringBefore(":").toIntOrNull() ?: -1
+            
+            // Nếu là ban đêm (từ 19h đến 6h sáng), không thể có nắng
+            if (hourOfDay in 0..6 || hourOfDay in 19..23) {
+                return false
+            }
+        } catch (e: Exception) {
+            // Nếu không parse được thời gian, bỏ qua kiểm tra này
+        }
+    }
+    
+    // Danh sách từ khóa cho mỗi loại thời tiết
+    val keywordMap = mapOf(
+        "Nắng" to listOf("nắng", "quang", "nắng nhẹ"),
+        "Mây" to listOf("mây", "nhiều mây", "rải rác"),
+        "Mưa" to listOf("mưa", "mưa phùn", "mưa rào", "mưa nhỏ", "mưa vừa", "mưa to"),
+        "Tuyết" to listOf("tuyết", "hạt tuyết"),
+        "Dông" to listOf("dông", "sấm", "sét"),
+        "Sương mù" to listOf("sương mù", "mù")
+    )
+    
+    val lowerDesc = weatherDescription.lowercase()
+    
+    // Kiểm tra các từ khóa tương ứng với loại thời tiết
+    val keywords = keywordMap[weatherFilter] ?: return false
+    return keywords.any { keyword -> lowerDesc.contains(keyword.lowercase()) }
 } 
