@@ -87,5 +87,14 @@ dependencies {
 
     implementation ("androidx.glance:glance-appwidget:1.0.0")
 
+    implementation ("com.google.accompanist:accompanist-pager-indicators:0.25.1")
 
+    implementation ("androidx.compose.ui:ui:1.6.4")
+    implementation ("androidx.compose.material3:material3:1.2.1")
+    implementation("com.squareup.okhttp3:logging-interceptor:4.12.0")
+
+    implementation("com.squareup.okhttp3:okhttp:4.12.0") // Hoặc phiên bản bạn dùng
+    implementation("com.squareup.okhttp3:logging-interceptor:4.12.0") // <<-- Đảm bảo dòng này có và cùng phiên bản
 }
+
+

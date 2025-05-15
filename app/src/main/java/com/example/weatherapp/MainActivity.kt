@@ -17,10 +17,16 @@ import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
+
 import androidx.activity.viewModels
 import androidx.compose.runtime.LaunchedEffect
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
+
+import androidx.appcompat.app.AlertDialog
+import androidx.compose.runtime.*
+import androidx.compose.ui.graphics.Color
+
 import androidx.core.content.ContextCompat
 import androidx.localbroadcastmanager.content.LocalBroadcastManager
 import androidx.work.*
@@ -29,6 +35,7 @@ import com.google.android.gms.location.LocationServices
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+
 import retrofit2.Call
 import retrofit2.Retrofit
 import retrofit2.converter.gson.GsonConverterFactory
@@ -38,6 +45,12 @@ import java.time.Duration
 import java.time.LocalDate
 import java.time.LocalDateTime
 import java.time.LocalTime
+
+import kotlinx.coroutines.withContext
+import okhttp3.OkHttpClient
+import okhttp3.Request
+import org.json.JSONObject
+
 import java.util.concurrent.TimeUnit
 import android.app.PendingIntent
 import java.time.format.DateTimeFormatter
@@ -76,7 +89,6 @@ class MainActivity : ComponentActivity() {
             checkGpsAndPrompt()
         } else {
             Log.e("MainActivity", "Quyền vị trí bị từ chối")
-        }
     }
 
     private val requestNotificationPermissionLauncher = registerForActivityResult(ActivityResultContracts.RequestPermission()) { isGranted ->
@@ -93,6 +105,7 @@ class MainActivity : ComponentActivity() {
             }
         } else {
             Log.w("MainActivity", "Notification permission not granted")
+            Toast.makeText(this, "Quyền vị trí bị từ chối", Toast.LENGTH_LONG).show()
         }
     }
 
@@ -266,51 +279,49 @@ class MainActivity : ComponentActivity() {
         checkAndUpdateWeatherData()
 
         setContent {
-            val viewModel: WeatherViewModel by viewModels(
-                factoryProducer = {
-                    WeatherViewModelFactory(
-                        weatherDao = weatherDao,
-                        openMeteoService = RetrofitInstance.api,
-                        airQualityService = RetrofitInstance.airQualityApi,
-                        geoapifyService = RetrofitInstance.geoapifyApi
-                    )
-                }
-            )
+val viewModel: WeatherViewModel by viewModels(
+    factoryProducer = {
+        WeatherViewModelFactory(
+            weatherDao = weatherDao,
+            openMeteoService = RetrofitInstance.api,
+            airQualityService = RetrofitInstance.airQualityApi,
+            geoapifyService = RetrofitInstance.geoapifyApi
+        )
+    }
+)
 
-            WeatherMainScreen(viewModel = viewModel)
+WeatherMainScreen(viewModel = viewModel)
 
-            LaunchedEffect(Unit) {
-                if (ContextCompat.checkSelfPermission(this@MainActivity, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED) {
-                    checkGpsAndPrompt()
-                }
-            }
+LaunchedEffect(Unit) {
+    if (ContextCompat.checkSelfPermission(this@MainActivity, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED) {
+        checkGpsAndPrompt()
+    }
+}
 
-            LaunchedEffect(Unit) {
-                try {
-                    fusedLocationClient.lastLocation.addOnSuccessListener { location ->
-                        if (location != null) {
-                            fetchCityName(location, viewModel)
-                        } else {
-                            Log.w("MainActivity", "Unable to get location")
-                        }
-                    }
-                } catch (e: SecurityException) {
-                    Log.e("MainActivity", "Location permission error: ${e.message}")
-                }
-            }
-
-            LaunchedEffect(Unit) {
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                    if (ContextCompat.checkSelfPermission(this@MainActivity, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
-                        requestNotificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
-                    } else {
-                        Log.d("MainActivity", "Notification permission already granted on launch")
-                    }
-                }
+LaunchedEffect(Unit) {
+    try {
+        fusedLocationClient.lastLocation.addOnSuccessListener { location ->
+            if (location != null) {
+                fetchCityName(location, viewModel)
+            } else {
+                Log.w("MainActivity", "Unable to get location")
+                Toast.makeText(this@MainActivity, "Không thể lấy vị trí", Toast.LENGTH_LONG).show()
             }
         }
-        checkLocationPermission()
+    } catch (e: SecurityException) {
+        Log.e("MainActivity", "Lỗi quyền vị trí: ${e.message}")
     }
+}
+
+LaunchedEffect(Unit) {
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+        if (ContextCompat.checkSelfPermission(this@MainActivity, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
+            requestNotificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+        } else {
+            Log.d("MainActivity", "Notification permission already granted on launch")
+        }
+    }
+}
 
     override fun onResume() {
         super.onResume()
@@ -461,6 +472,16 @@ class MainActivity : ComponentActivity() {
             if (isDailyForecastEnabled) {
                 scheduleDailyForecastNotifications(this@MainActivity)
             }
+            
+            scheduleWeatherUpdateWorker()
+        }
+    }
+
+    private fun checkLocationPermission() {
+        when {
+            ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED -> {
+                checkGpsAndPrompt()
+            }
 
             isRainAlertEnabled = preferences.getBoolean("rain_alert_enabled", false)
             if (isRainAlertEnabled) {
@@ -507,110 +528,252 @@ class MainActivity : ComponentActivity() {
             )
     }
 
-    private fun sendImmediateForecastNotifications(context: Context) {
-        val constraints = Constraints.Builder()
-            .setRequiredNetworkType(NetworkType.NOT_REQUIRED)
-            .build()
+private fun sendImmediateForecastNotifications(context: Context) {
+    val constraints = Constraints.Builder()
+        .setRequiredNetworkType(NetworkType.NOT_REQUIRED)
+        .build()
 
-        val immediateTodayRequest = OneTimeWorkRequestBuilder<DailyForecastWorker>()
-            .setConstraints(constraints)
-            .addTag("forecast_today_immediate")
-            .build()
+    val immediateTodayRequest = OneTimeWorkRequestBuilder<DailyForecastWorker>()
+        .setConstraints(constraints)
+        .addTag("forecast_today_immediate")
+        .build()
 
-        val immediateTomorrowRequest = OneTimeWorkRequestBuilder<DailyForecastWorker>()
-            .setConstraints(constraints)
-            .addTag("forecast_tomorrow_immediate")
-            .build()
+    val immediateTomorrowRequest = OneTimeWorkRequestBuilder<DailyForecastWorker>()
+        .setConstraints(constraints)
+        .addTag("forecast_tomorrow_immediate")
+        .build()
 
-        WorkManager.getInstance(context).apply {
-            beginUniqueWork(
-                "daily_forecast_immediate",
-                ExistingWorkPolicy.REPLACE,
-                immediateTodayRequest
-            ).then(immediateTomorrowRequest).enqueue()
-        }
-        Log.d("MainActivity", "Immediate forecast notifications enqueued for today and tomorrow")
+    WorkManager.getInstance(context).apply {
+        beginUniqueWork(
+            "daily_forecast_immediate",
+            ExistingWorkPolicy.REPLACE,
+            immediateTodayRequest
+        ).then(immediateTomorrowRequest).enqueue()
     }
+    Log.d("MainActivity", "Immediate forecast notifications enqueued for today and tomorrow")
+}
+
+private fun getLocation() {
+    try {
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
+            Log.e("MainActivity", "Quyền vị trí không được cấp")
+            Toast.makeText(this, "Quyền vị trí không được cấp", Toast.LENGTH_LONG).show()
+            return
+        }
+
+        fusedLocationClient.lastLocation.addOnSuccessListener { location ->
+            if (location != null) {
+                Log.d("WeatherApp", "Vị trí cuối cùng: lat=${location.latitude}, lon=${location.longitude}")
+                // viewModel sẽ được truyền từ setContent, không khởi tạo ở đây
+                // fetchCityName sẽ được gọi từ LaunchedEffect trong setContent
+            } else {
+                Log.d("WeatherApp", "Vị trí cuối cùng không khả dụng, yêu cầu cập nhật vị trí mới")
+                requestNewLocation()
+            }
+        }.addOnFailureListener { e ->
+            Log.e("WeatherApp", "Lỗi lấy vị trí cuối cùng: ${e.message}")
+            Toast.makeText(this, "Lỗi vị trí: ${e.message}", Toast.LENGTH_LONG).show()
+        }
+    } catch (e: SecurityException) {
+        Log.e("WeatherApp", "Lỗi quyền vị trí: ${e.message}")
+        Toast.makeText(this, "Lỗi quyền vị trí", Toast.LENGTH_LONG).show()
+    } catch (e: Exception) {
+        Log.e("WeatherApp", "Lỗi không xác định khi lấy vị trí: ${e.message}")
+        Toast.makeText(this, "Lỗi không xác định: ${e.message}", Toast.LENGTH_LONG).show()
+    }
+}
 
     private fun scheduleDailyForecastNotifications(context: Context) {
         val constraints = Constraints.Builder()
             .setRequiredNetworkType(NetworkType.CONNECTED)
             .build()
 
-        // Morning notification (9:00 AM, fallback 10:00-11:00 AM)
-        val morningDelay = calculateInitialDelay(9, 10, 11)
-        val morningNotificationRequest = PeriodicWorkRequestBuilder<DailyForecastWorker>(
-            repeatInterval = 24,
-            repeatIntervalTimeUnit = TimeUnit.HOURS
-        )
-            .setConstraints(constraints)
-            .setInitialDelay(morningDelay, TimeUnit.MILLISECONDS)
-            .addTag("forecast_today")
-            .build()
+private fun scheduleDailyForecastNotifications(context: Context) {
+    val constraints = Constraints.Builder()
+        .setRequiredNetworkType(NetworkType.CONNECTED)
+        .build()
 
-        // Evening notification (9:00 PM, fallback 10:00-11:00 PM)
-        val eveningDelay = calculateInitialDelay(21, 22, 23)
-        val eveningNotificationRequest = PeriodicWorkRequestBuilder<DailyForecastWorker>(
-            repeatInterval = 24,
-            repeatIntervalTimeUnit = TimeUnit.HOURS
-        )
-            .setConstraints(constraints)
-            .setInitialDelay(eveningDelay, TimeUnit.MILLISECONDS)
-            .addTag("forecast_tomorrow")
-            .build()
+    // Morning notification (9:00 AM, fallback 10:00-11:00 AM)
+    val morningDelay = calculateInitialDelay(9, 10, 11)
+    val morningNotificationRequest = PeriodicWorkRequestBuilder<DailyForecastWorker>(
+        repeatInterval = 24,
+        repeatIntervalTimeUnit = TimeUnit.HOURS
+    )
+        .setConstraints(constraints)
+        .setInitialDelay(morningDelay, TimeUnit.MILLISECONDS)
+        .addTag("forecast_today")
+        .build()
 
-        WorkManager.getInstance(context).apply {
-            enqueueUniquePeriodicWork(
-                "daily_forecast_today",
-                ExistingPeriodicWorkPolicy.REPLACE,
-                morningNotificationRequest
-            )
-            enqueueUniquePeriodicWork(
-                "daily_forecast_tomorrow",
-                ExistingPeriodicWorkPolicy.REPLACE,
-                eveningNotificationRequest
-            )
+    // Evening notification (9:00 PM, fallback 10:00-11:00 PM)
+    val eveningDelay = calculateInitialDelay(21, 22, 23)
+    val eveningNotificationRequest = PeriodicWorkRequestBuilder<DailyForecastWorker>(
+        repeatInterval = 24,
+        repeatIntervalTimeUnit = TimeUnit.HOURS
+    )
+        .setConstraints(constraints)
+        .setInitialDelay(eveningDelay, TimeUnit.MILLISECONDS)
+        .addTag("forecast_tomorrow")
+        .build()
+
+    WorkManager.getInstance(context).apply {
+        enqueueUniquePeriodicWork(
+            "daily_forecast_today",
+            ExistingPeriodicWorkPolicy.REPLACE,
+            morningNotificationRequest
+        )
+        enqueueUniquePeriodicWork(
+            "daily_forecast_tomorrow",
+            ExistingPeriodicWorkPolicy.REPLACE,
+            eveningNotificationRequest
+        )
+    }
+    Log.d("MainActivity", "Scheduled daily forecast notifications at 9:00 AM/10:00-11:00 AM and 9:00 PM/10:00-11:00 PM")
+}
+
+private fun requestNewLocation() {
+    val locationCallback = object : LocationCallback() {
+        override fun onLocationResult(locationResult: LocationResult) {
+            val location = locationResult.lastLocation
+            if (location != null) {
+                Log.d("WeatherApp", "Vị trí mới: lat=${location.latitude}, lon=${location.longitude}")
+                // viewModel sẽ được truyền từ setContent, không khởi tạo ở đây
+                // fetchCityName sẽ được gọi từ LaunchedEffect trong setContent
+            } else {
+                Log.e("WeatherApp", "Không thể lấy vị trí mới")
+                Toast.makeText(this@MainActivity, "Không lấy được vị trí", Toast.LENGTH_LONG).show()
+            }
+            fusedLocationClient.removeLocationUpdates(this)
         }
-        Log.d("MainActivity", "Scheduled daily forecast notifications at 9:00 AM/10:00-11:00 AM and 9:00 PM/10:00-11:00 PM")
     }
 
-    private fun cancelDailyForecastNotifications(context: Context) {
-        WorkManager.getInstance(context).apply {
-            cancelUniqueWork("daily_forecast_immediate")
-            cancelUniqueWork("daily_forecast_today")
-            cancelUniqueWork("daily_forecast_tomorrow")
-        }
-        Log.d("MainActivity", "Cancelled daily forecast notifications")
+    try {
+        fusedLocationClient.requestLocationUpdates(locationRequest, locationCallback, Looper.getMainLooper())
+            .addOnFailureListener { e ->
+                Log.e("WeatherApp", "Lỗi yêu cầu vị trí mới: ${e.message}")
+                Toast.makeText(this@MainActivity, "Lỗi vị trí: ${e.message}", Toast.LENGTH_LONG).show()
+            }
+    } catch (e: SecurityException) {
+        Log.e("WeatherApp", "Lỗi quyền vị trí: ${e.message}")
+        Toast.makeText(this@MainActivity, "Lỗi quyền vị trí", Toast.LENGTH_LONG).show()
+    } catch (e: Exception) {
+        Log.e("WeatherApp", "Lỗi không xác định khi yêu cầu vị trí: ${e.message}")
+        Toast.makeText(this@MainActivity, "Lỗi không xác định: ${e.message}", Toast.LENGTH_LONG).show()
+    }
+}
+
+private fun cancelDailyForecastNotifications(context: Context) {
+    WorkManager.getInstance(context).apply {
+        cancelUniqueWork("daily_forecast_immediate")
+        cancelUniqueWork("daily_forecast_today")
+        cancelUniqueWork("daily_forecast_tomorrow")
+    }
+    Log.d("MainActivity", "Cancelled daily forecast notifications")
+}
+
+private fun fetchCityName(location: Location, viewModel: WeatherViewModel) {
+    val sharedPreferences = getSharedPreferences("WeatherPrefs", Context.MODE_PRIVATE)
+    with(sharedPreferences.edit()) {
+        putFloat("latitude", location.latitude.toFloat())
+        putFloat("longitude", location.longitude.toFloat())
+        apply()
     }
 
-    private fun scheduleRainAlertWorker(context: Context) {
-        val constraints = Constraints.Builder()
-            .setRequiredNetworkType(NetworkType.NOT_REQUIRED)
-            .build()
-
-        val periodicRainRequest = PeriodicWorkRequestBuilder<RainAlertWorker>(
-            repeatInterval = 15,
-            repeatIntervalTimeUnit = TimeUnit.MINUTES
+    if (!isInternetAvailable()) {
+        Log.w("WeatherApp", "Không có kết nối internet, không thể lấy tên thành phố")
+        Toast.makeText(this, "Không có kết nối internet, không thể lấy tên thành phố", Toast.LENGTH_LONG).show()
+        val city = City(
+            name = "Vị trí hiện tại",
+            latitude = location.latitude,
+            longitude = location.longitude
         )
-            .setConstraints(constraints)
-            .addTag("rain_alert")
-            .build()
-
-        WorkManager.getInstance(context).enqueueUniquePeriodicWork(
-            "rain_alert",
-            ExistingPeriodicWorkPolicy.KEEP,
-            periodicRainRequest
-        )
-        Log.d("MainActivity", "Scheduled RainAlertWorker to run every 15 minutes")
+        viewModel.addCity(city)
+        return
     }
 
-    private fun cancelRainAlertWorker(context: Context) {
-        WorkManager.getInstance(context).apply {
-            cancelUniqueWork("rain_alert_immediate")
-            cancelUniqueWork("rain_alert")
+    CoroutineScope(Dispatchers.IO).launch {
+        try {
+            val apiKey = "183500a3f01b45a5b6076845dae351b3"
+            val url = "https://api.geoapify.com/v1/geocode/reverse?lat=${location.latitude}&lon=${location.longitude}&lang=vi&apiKey=$apiKey"
+            val request = Request.Builder().url(url).build()
+            val client = OkHttpClient()
+            val response = client.newCall(request).execute()
+            val responseBody = response.body?.string()
+
+            if (response.isSuccessful && responseBody != null) {
+                val jsonObject = JSONObject(responseBody)
+                val features = jsonObject.getJSONArray("features")
+                val cityName = if (features.length() > 0) {
+                    val firstFeature = features.getJSONObject(0)
+                    val properties = firstFeature.getJSONObject("properties")
+                    properties.optString("city", "Không xác định")
+                } else {
+                    "Không xác định"
+                }
+                Log.d("WeatherApp", "Thành phố từ Geoapify API: $cityName")
+
+                withContext(Dispatchers.Main) {
+                    val city = City(
+                        name = if (cityName == "Không xác định") "Vị trí hiện tại" else cityName,
+                        latitude = location.latitude,
+                        longitude = location.longitude
+                    )
+                    viewModel.addCity(city)
+                }
+            } else {
+                Log.e("WeatherApp", "Lỗi gọi Geoapify API: ${response.code}")
+                withContext(Dispatchers.Main) {
+                    Toast.makeText(this@MainActivity, "Lỗi lấy tên thành phố từ API", Toast.LENGTH_LONG).show()
+                    val city = City(
+                        name = "Vị trí hiện tại",
+                        latitude = location.latitude,
+                        longitude = location.longitude
+                    )
+                    viewModel.addCity(city)
+                }
+            }
+        } catch (e: Exception) {
+            Log.e("WeatherApp", "Lỗi gọi Geoapify API: ${e.message}")
+            withContext(Dispatchers.Main) {
+                Toast.makeText(this@MainActivity, "Lỗi lấy tên thành phố: ${e.message}", Toast.LENGTH_LONG).show()
+                val city = City(
+                    name = "Vị trí hiện tại",
+                    latitude = location.latitude,
+                    longitude = location.longitude
+                )
+                viewModel.addCity(city)
+            }
         }
-        Log.d("MainActivity", "Cancelled RainAlertWorker")
     }
+}
+
+private fun scheduleRainAlertWorker(context: Context) {
+    val constraints = Constraints.Builder()
+        .setRequiredNetworkType(NetworkType.NOT_REQUIRED)
+        .build()
+
+    val periodicRainRequest = PeriodicWorkRequestBuilder<RainAlertWorker>(
+        repeatInterval = 15,
+        repeatIntervalTimeUnit = TimeUnit.MINUTES
+    )
+        .setConstraints(constraints)
+        .addTag("rain_alert")
+        .build()
+
+    WorkManager.getInstance(context).enqueueUniquePeriodicWork(
+        "rain_alert",
+        ExistingPeriodicWorkPolicy.KEEP,
+        periodicRainRequest
+    )
+    Log.d("MainActivity", "Scheduled RainAlertWorker to run every 15 minutes")
+}
+
+private fun cancelRainAlertWorker(context: Context) {
+    WorkManager.getInstance(context).apply {
+        cancelUniqueWork("rain_alert_immediate")
+        cancelUniqueWork("rain_alert")
+    }
+    Log.d("MainActivity", "Cancelled RainAlertWorker")
+}
 
     private fun scheduleSevereWeatherAlertWorker(context: Context) {
         val constraints = Constraints.Builder()
@@ -772,3 +935,4 @@ class MainActivity : ComponentActivity() {
         }
     }
 }
+

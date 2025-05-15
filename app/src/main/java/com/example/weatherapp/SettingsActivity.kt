@@ -1,5 +1,6 @@
 package com.example.weatherapp
 
+
 import android.Manifest
 import android.content.Context
 import android.content.Intent
@@ -10,17 +11,24 @@ import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.ui.window.Dialog
+import android.R
+
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+
+import androidx.compose.foundation.lazy.itemsIndexed
+
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
@@ -68,11 +76,13 @@ class SettingsActivity : ComponentActivity() {
                     requestPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
                 }
             }
+
         }
     }
 }
 
 @Composable
+
 fun SettingsScreen(
     onBackClick: () -> Unit,
     onRequestNotificationPermission: () -> Unit
@@ -132,12 +142,15 @@ fun SettingsScreen(
         onRequestNotificationPermission()
     }
 
+
     Column(
         modifier = Modifier
             .fillMaxSize()
+
             .background(Color.White)
             .padding(16.dp)
     ) {
+
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -147,7 +160,9 @@ fun SettingsScreen(
         ) {
             IconButton(onClick = onBackClick) {
                 Icon(
+
                     painter = painterResource(id = android.R.drawable.ic_menu_zoom),
+
                     contentDescription = "Back",
                     tint = Color(0xFF5372dc)
                 )
@@ -158,8 +173,10 @@ fun SettingsScreen(
                 fontWeight = FontWeight.Bold,
                 color = Color(0xFF5372dc)
             )
+
             Spacer(modifier = Modifier.width(48.dp))
         }
+
 
         Text(
             text = "Cảnh báo thời tiết",
@@ -186,6 +203,7 @@ fun SettingsScreen(
                     color = Color(0xFF5372dc)
                 )
                 Switch(
+
                     checked = isRainAlertEnabled,
                     onCheckedChange = { enabled ->
                         try {
@@ -221,11 +239,14 @@ fun SettingsScreen(
                             Log.e("SettingsActivity", "Error updating rain_alert_enabled: ${e.message}", e)
                         }
                     },
+
                     colors = SwitchDefaults.colors(
                         checkedThumbColor = Color(0xFF5372dc),
                         uncheckedThumbColor = Color(0xFF60616B),
                         checkedTrackColor = Color(0xFF5372dc).copy(alpha = 0.5f),
+
                         uncheckedTrackColor = Color.White.copy(alpha = 0f),
+
                         disabledCheckedThumbColor = Color.Gray,
                         disabledUncheckedThumbColor = Color.Gray,
                         disabledCheckedTrackColor = Color.LightGray,
@@ -233,7 +254,9 @@ fun SettingsScreen(
                     )
                 )
             }
+
             Spacer(modifier = Modifier.height(8.dp))
+
 
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -252,9 +275,11 @@ fun SettingsScreen(
                     color = Color(0xFF5372dc),
                     modifier = Modifier
                         .clickable { showStartTimePicker = true }
+
                         .padding(start = 8.dp)
                 )
             }
+
 
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -273,14 +298,17 @@ fun SettingsScreen(
                     color = Color(0xFF5372dc),
                     modifier = Modifier
                         .clickable { showEndTimePicker = true }
+
                         .padding(start = 8.dp)
                 )
             }
+
 
             if (showStartTimePicker) {
                 TimePickerDialog(
                     onTimeSelected = { selectedTime ->
                         startTime = selectedTime
+
                         editor.putString("rain_alert_start_time", selectedTime).apply()
                         showStartTimePicker = false
                         val intent = Intent("com.example.weatherapp.RAIN_ALERT_UPDATED")
@@ -288,6 +316,7 @@ fun SettingsScreen(
                         intent.putExtra("rain_alert_start_time", startTime)
                         intent.putExtra("rain_alert_end_time", endTime)
                         LocalBroadcastManager.getInstance(context).sendBroadcast(intent)
+
                     },
                     onDismiss = { showStartTimePicker = false }
                 )
@@ -296,6 +325,7 @@ fun SettingsScreen(
                 TimePickerDialog(
                     onTimeSelected = { selectedTime ->
                         endTime = selectedTime
+
                         editor.putString("rain_alert_end_time", selectedTime).apply()
                         showEndTimePicker = false
                         val intent = Intent("com.example.weatherapp.RAIN_ALERT_UPDATED")
@@ -303,6 +333,7 @@ fun SettingsScreen(
                         intent.putExtra("rain_alert_start_time", startTime)
                         intent.putExtra("rain_alert_end_time", endTime)
                         LocalBroadcastManager.getInstance(context).sendBroadcast(intent)
+
                     },
                     onDismiss = { showEndTimePicker = false }
                 )
@@ -321,6 +352,7 @@ fun SettingsScreen(
                     color = Color(0xFF5372dc)
                 )
                 Switch(
+
                     checked = isSevereWeatherAlertEnabled,
                     onCheckedChange = { enabled ->
                         try {
@@ -354,11 +386,14 @@ fun SettingsScreen(
                             Log.e("SettingsActivity", "Error updating severe_weather_alert_enabled: ${e.message}", e)
                         }
                     },
+
                     colors = SwitchDefaults.colors(
                         checkedThumbColor = Color(0xFF5372dc),
                         uncheckedThumbColor = Color(0xFF60616B),
                         checkedTrackColor = Color(0xFF5372dc).copy(alpha = 0.5f),
+
                         uncheckedTrackColor = Color.White.copy(alpha = 0f),
+
                         disabledCheckedThumbColor = Color.Gray,
                         disabledUncheckedThumbColor = Color.Gray,
                         disabledCheckedTrackColor = Color.LightGray,
@@ -369,6 +404,9 @@ fun SettingsScreen(
         }
 
         Spacer(modifier = Modifier.height(16.dp))
+
+
+        // Phần Dự báo thời tiết hàng ngày
 
         Column(
             modifier = Modifier
@@ -392,13 +430,16 @@ fun SettingsScreen(
                     )
                     Spacer(modifier = Modifier.height(4.dp))
                     Text(
+
                         text = "Nhận thông tin cập nhật về thời tiết định kỳ cho thành phố hiện tại của bạn hai lần một ngày, một lần cho ngày hôm nay và một lần khác cho ngày mai.",
+
                         fontSize = 13.sp,
                         color = Color(0xFF7380BB)
                     )
                 }
                 Spacer(modifier = Modifier.width(5.dp))
                 Switch(
+
                     checked = isDailyForecastEnabled,
                     onCheckedChange = { enabled ->
                         try {
@@ -422,11 +463,14 @@ fun SettingsScreen(
                             Log.e("SettingsActivity", "Error updating daily_forecast_enabled: ${e.message}", e)
                         }
                     },
+
                     colors = SwitchDefaults.colors(
                         checkedThumbColor = Color(0xFF5372dc),
                         uncheckedThumbColor = Color(0xFF60616B),
                         checkedTrackColor = Color(0xFF5372dc).copy(alpha = 0.5f),
+
                         uncheckedTrackColor = Color.White.copy(alpha = 0f),
+
                         disabledCheckedThumbColor = Color.Gray,
                         disabledUncheckedThumbColor = Color.Gray,
                         disabledCheckedTrackColor = Color.LightGray,
@@ -445,6 +489,9 @@ fun SettingsScreen(
             modifier = Modifier.padding(start = 16.dp)
         )
         Spacer(modifier = Modifier.height(6.dp))
+
+        // Phần Đơn vị
+
         Column(
             modifier = Modifier
                 .fillMaxWidth()
@@ -485,10 +532,12 @@ fun SettingsScreen(
             )
         }
 
+
         if (showUnitDialog) {
             val unitOptions = when (currentUnitType) {
                 "Nhiệt độ" -> listOf("Độ C (°C)", "Độ F (°F)")
                 "Gió" -> listOf("Thang đo Beaufort", "Kilomet mỗi giờ (km/h)", "Mét mỗi giây (m/s)", "Feet mỗi giây (ft/s)", "Dặm mỗi giờ (mph)", "Hải lý mỗi giờ (hải lý)")
+
                 "Áp suất không khí" -> listOf("Hectopascal (hPa)", "Millimet thủy ngân (mmHg)", "Inch thủy ngân (inHg)", "Millibar (mb)", "Pound trên inch vuông (psi)")
                 "Tầm nhìn" -> listOf("Kilomet (km)", "Dặm (mi)", "Mét (m)", "Feet (ft)")
                 else -> emptyList()
@@ -498,6 +547,7 @@ fun SettingsScreen(
                 title = currentUnitType,
                 options = unitOptions,
                 onUnitSelected = { selectedUnit ->
+
                     try {
                         when (currentUnitType) {
                             "Nhiệt độ" -> {
@@ -528,6 +578,7 @@ fun SettingsScreen(
                     } finally {
                         showUnitDialog = false
                     }
+
                 },
                 onDismiss = { showUnitDialog = false }
             )
@@ -571,7 +622,9 @@ fun UnitSelectionDialog(
             modifier = Modifier
                 .background(Color.White, shape = RoundedCornerShape(20.dp))
                 .padding(20.dp)
+
                 .width(280.dp)
+
         ) {
             Column {
                 Text(
@@ -581,7 +634,9 @@ fun UnitSelectionDialog(
                     color = Color(0xFF5372dc),
                     modifier = Modifier.padding(bottom = 8.dp)
                 )
+
                 LazyColumn(modifier = Modifier.heightIn(max = 200.dp)) {
+
                     items(options) { option ->
                         Text(
                             text = option,
@@ -605,6 +660,7 @@ fun TimePickerDialog(
     onTimeSelected: (String) -> Unit,
     onDismiss: () -> Unit
 ) {
+
     val times = mutableListOf<String>()
     for (hour in 0..23) {
         for (minute in 0..59 step 5) {
@@ -615,6 +671,7 @@ fun TimePickerDialog(
         times.add("23:59")
     }
 
+
     Dialog(onDismissRequest = onDismiss) {
         Box(
             modifier = Modifier
@@ -624,25 +681,32 @@ fun TimePickerDialog(
                 .heightIn(max = 300.dp)
         ) {
             LazyColumn {
+
                 items(times) { time ->
+
                     Column {
                         Box(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .clickable {
+
                                     onTimeSelected(time)
+
                                     onDismiss()
                                 }
                                 .padding(vertical = 12.dp),
                             contentAlignment = Alignment.Center
                         ) {
                             Text(
+
                                 text = time,
+
                                 fontWeight = FontWeight.Medium,
                                 style = MaterialTheme.typography.bodyLarge,
                                 color = Color(0xFF5372dc)
                             )
                         }
+
                         Divider(color = Color(0xFFBFC5D5), thickness = 0.8.dp)
                     }
                 }
@@ -650,3 +714,4 @@ fun TimePickerDialog(
         }
     }
 }
+
