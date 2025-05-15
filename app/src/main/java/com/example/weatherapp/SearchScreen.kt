@@ -201,7 +201,7 @@ fun SearchScreen(
             modifier = Modifier
                 .fillMaxWidth()
                 .fillMaxHeight(fraction = 0.8f)
-                .background
+                .background(
                     brush = Brush.verticalGradient(
                         colors = listOf(Color(0xFFcbdfff), Color(0xFFfcdbf6))
                     ),

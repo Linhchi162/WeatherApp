@@ -42,4 +42,5 @@ interface WeatherDao {
 
     @Query("SELECT * FROM weather_data")
     suspend fun getAllWeatherData(): List<WeatherData>
+}
 

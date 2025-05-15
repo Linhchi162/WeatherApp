@@ -1,4 +1,3 @@
-
 package com.example.weatherapp
 
 import android.content.Context
@@ -24,13 +23,13 @@ class WeatherUpdateWorker(
             val weatherDao = WeatherDatabase.getDatabase(applicationContext).weatherDao()
             val openMeteoService = RetrofitInstance.api
             val airQualityService = RetrofitInstance.airQualityApi
-            val geoapifyService = RetrofitInstance.geoapifyApi
+            val geoNamesService = RetrofitInstance.geoNamesApi
 
             val viewModel = WeatherViewModel(
                 weatherDao,
                 openMeteoService,
                 airQualityService,
-                geoapifyService
+                geoNamesService
             )
 
             val cities = viewModel.citiesList

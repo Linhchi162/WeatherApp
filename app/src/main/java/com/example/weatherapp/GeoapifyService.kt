@@ -20,6 +20,9 @@ data class GeoProperties(
     val state: String?,
     val country: String?,
     val postcode: String?,
+    val district: String?,
+    val suburb: String?,
+    val municipality: String?,
     val lat: Double?,
     val lon: Double?,
     val place_id: String?
@@ -41,8 +44,7 @@ interface GeoapifyService {
         @Query("apiKey") apiKey: String,
         @Query("lang") language: String = "vi",
         @Query("limit") limit: Int = 10,
-        // Sửa giá trị của tham số type ở đây
-        @Query("type") type: String = "city", // Chỉ dùng "city"
+        @Query("type") type: String = "street,district,suburb,locality,place",
         // @Query("filter") filter: String = "countrycode:vn" // Có thể bỏ comment dòng này nếu chỉ muốn tìm ở VN
     ): GeoapifyAutocompleteResponse
 }

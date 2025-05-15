@@ -9,10 +9,8 @@ import androidx.lifecycle.ViewModelProvider
 class WeatherViewModelFactory(
     private val weatherDao: WeatherDao,
     private val openMeteoService: OpenMeteoService = RetrofitInstance.api,
-
-    private val airQualityService: AirQualityService = RetrofitInstance.airQualityApi, // Provide AirQualityService
-    private val geoapifyService: GeoapifyService = RetrofitInstance.geoapifyApi
-
+    private val airQualityService: AirQualityService = RetrofitInstance.airQualityApi,
+    private val geoNamesService: GeoNamesService = RetrofitInstance.geoNamesApi
 ) : ViewModelProvider.Factory {
 
     @Suppress("UNCHECKED_CAST")
@@ -22,10 +20,8 @@ class WeatherViewModelFactory(
             return WeatherViewModel(
                 weatherDao,
                 openMeteoService,
-
-                airQualityService, // Pass the new service
-                geoapifyService
-
+                airQualityService,
+                geoNamesService
             ) as T
         }
         throw IllegalArgumentException("Unknown ViewModel class: ${modelClass.name}")
