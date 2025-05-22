@@ -47,7 +47,7 @@ fun SearchScreen(
     var humidityRange by remember { mutableStateOf(0f..100f) }
     var weatherState by remember { mutableStateOf("Tất cả") }
     var showWeatherDropdown by remember { mutableStateOf(false) }
-    var selectedCountry by remember { mutableStateOf("Việt Nam") }
+    var selectedCountry by remember { mutableStateOf("") }
     var showCountryDropdown by remember { mutableStateOf(false) }
     var isLoading by remember { mutableStateOf(false) }
     
@@ -58,42 +58,54 @@ fun SearchScreen(
     var countrySearchError by remember { mutableStateOf<String?>(null) }
     var searchCountryJob by remember { mutableStateOf<kotlinx.coroutines.Job?>(null) }
     
-    // Danh sách mặc định làm dự phòng khi API lỗi
-    val fallbackCountries = listOf(
-        PlaceSuggestion("Việt Nam", null, "Việt Nam", null, null),
-        PlaceSuggestion("Hoa Kỳ", null, "Hoa Kỳ", null, null),
-        PlaceSuggestion("Mỹ", null, "Hoa Kỳ", null, null), // Thêm cách gọi phổ biến
-        PlaceSuggestion("Nhật Bản", null, "Nhật Bản", null, null),
-        PlaceSuggestion("Hàn Quốc", null, "Hàn Quốc", null, null),
-        PlaceSuggestion("Trung Quốc", null, "Trung Quốc", null, null),
-        PlaceSuggestion("Anh", null, "Anh", null, null),
-        PlaceSuggestion("Pháp", null, "Pháp", null, null),
-        PlaceSuggestion("Đức", null, "Đức", null, null),
-        PlaceSuggestion("Úc", null, "Úc", null, null),
-        PlaceSuggestion("Nga", null, "Nga", null, null),
-        PlaceSuggestion("Canada", null, "Canada", null, null),
-        PlaceSuggestion("Ý", null, "Ý", null, null),
-        PlaceSuggestion("Thái Lan", null, "Thái Lan", null, null)
+    // Danh sách quốc gia mặc định (đã xóa tùy chọn "Tất cả")
+    val defaultCountries = listOf(
+        "Việt Nam", 
+        "Hoa Kỳ", 
+        "Nhật Bản", 
+        "Hàn Quốc", 
+        "Trung Quốc",
+        "Anh",
+        "Pháp",
+        "Đức",
+        "Nga",
+        "Úc",
+        "Ấn Độ",
+        "Canada",
+        "Ý",
+        "Tây Ban Nha",
+        "Brazil",
+        "Mexico",
+        "Indonesia",
+        "Malaysia",
+        "Singapore",
+        "Thái Lan"
     )
     
-    // Tìm kiếm trong danh sách dự phòng
-    val localFilteredCountries = remember(filterCountryQuery) {
-        val cleanQuery = filterCountryQuery.trim().lowercase()
-        
-        Log.d("SearchScreen", "Tìm kiếm: '$cleanQuery' trong ${fallbackCountries.size} quốc gia")
-        
-        if (cleanQuery.isBlank()) {
-            emptyList()
-        } else {
-            // Hiển thị kết quả ngay cả khi chỉ có 1 ký tự
-            fallbackCountries.filter { suggestion -> 
-                val formattedNameMatch = suggestion.formattedName.lowercase().contains(cleanQuery) 
-                val countryMatch = suggestion.country?.lowercase()?.contains(cleanQuery) == true
-                
-                Log.d("SearchScreen", "Kiểm tra: '${suggestion.formattedName}' - formattedMatch: $formattedNameMatch, countryMatch: $countryMatch")
-                
-                formattedNameMatch || countryMatch
-            }
+    // Danh sách mặc định làm dự phòng khi API lỗi
+    val localFilteredCountries = if (filterCountryQuery.isBlank()) {
+        // Nếu truy vấn trống, hiển thị tất cả quốc gia mặc định
+        defaultCountries.map { country -> 
+            PlaceSuggestion(
+                formattedName = country,
+                city = null,
+                country = country,
+                latitude = null,
+                longitude = null
+            )
+        }
+    } else {
+        // Nếu có truy vấn, lọc quốc gia phù hợp với truy vấn
+        defaultCountries.filter { 
+            it.lowercase().contains(filterCountryQuery.lowercase()) 
+        }.map { country ->
+            PlaceSuggestion(
+                formattedName = country,
+                city = null,
+                country = country,
+                latitude = null,
+                longitude = null
+            )
         }
     }
     
@@ -283,7 +295,7 @@ fun SearchScreen(
                     if (filterCountryQuery.isNotEmpty() || selectedCountry.isNotEmpty()) {
                         IconButton(onClick = {
                             filterCountryQuery = ""
-                            selectedCountry = "Việt Nam"
+                            selectedCountry = ""
                             countrySuggestions = emptyList()
                         }) {
                             Icon(

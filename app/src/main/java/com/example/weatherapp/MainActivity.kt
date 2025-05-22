@@ -60,6 +60,8 @@ import android.widget.Toast
 import com.google.android.gms.location.LocationCallback
 import com.google.android.gms.location.LocationResult
 import java.time.format.DateTimeFormatter
+import android.os.SystemClock
+import java.util.Date
 
 interface NominatimService {
     @GET("reverse?format=json")
@@ -144,6 +146,8 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
 
         Log.d("MainActivity", "onCreate started")
+        // Thêm log để debug
+        Log.e("LocationTest", "===== App khởi động - bắt đầu kiểm tra log vị trí =====")
         
         weatherDatabase = WeatherDatabase.getDatabase(this)
         weatherDao = weatherDatabase.weatherDao()
@@ -155,9 +159,28 @@ class MainActivity : ComponentActivity() {
         // Initialize locationRequest
         locationRequest = com.google.android.gms.location.LocationRequest.create().apply {
             priority = com.google.android.gms.location.LocationRequest.PRIORITY_HIGH_ACCURACY
-            interval = 10000 // Update interval in milliseconds
-            fastestInterval = 5000 // Fastest update interval in milliseconds
+            interval = 1000 // Update interval in milliseconds
+            fastestInterval = 500 // Fastest update interval in milliseconds
+            maxWaitTime = 5000 // Maximum wait time for location updates
         }
+        
+        // Kiểm tra vị trí đã lưu từ trước
+        val sharedPreferences = getSharedPreferences("WeatherPrefs", Context.MODE_PRIVATE)
+        val hasSavedLocation = sharedPreferences.getBoolean("has_saved_location", false)
+        
+        // Nếu có vị trí đã lưu, chúng ta sẽ sử dụng nó tạm thời trong lúc chờ vị trí mới
+        if (hasSavedLocation) {
+            val savedLatitude = sharedPreferences.getFloat("saved_latitude", 0f).toDouble()
+            val savedLongitude = sharedPreferences.getFloat("saved_longitude", 0f).toDouble()
+            if (savedLatitude != 0.0 && savedLongitude != 0.0) {
+                Log.d("MainActivity", "Đã tìm thấy vị trí đã lưu: lat=$savedLatitude, lon=$savedLongitude")
+                // Vị trí đã lưu sẽ được sử dụng trong checkSavedLocation sau khi ViewModel được khởi tạo
+            }
+        }
+        
+        // Log debug quyền vị trí
+        val hasLocationPermission = ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED
+        Log.e("LocationTest", "Quyền vị trí hiện tại: " + (if (hasLocationPermission) "ĐÃ ĐƯỢC CẤP" else "CHƯA ĐƯỢC CẤP"))
 
         // Kiểm tra xem có phải lần đầu khởi động app không
         isFirstLaunch = preferences.getBoolean("is_first_launch", true)
@@ -173,6 +196,11 @@ class MainActivity : ComponentActivity() {
             if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
                 Log.d("MainActivity", "Yêu cầu quyền vị trí lần đầu")
                 requestLocationPermission()
+            } else {
+                // Nếu đã có quyền, lấy vị trí ngay lập tức
+                Log.d("MainActivity", "Đã có quyền vị trí, lấy vị trí ngay lập tức")
+                getLocation()
+                isLocationRequested = true
             }
         }
         
@@ -348,16 +376,6 @@ class MainActivity : ComponentActivity() {
 
         checkAndUpdateWeatherData()
 
-        // Check for saved location data before setting content
-        val sharedPreferences = getSharedPreferences("WeatherPrefs", Context.MODE_PRIVATE)
-        val hasSavedLocation = sharedPreferences.getBoolean("has_saved_location", false)
-        val savedLatitude = sharedPreferences.getFloat("saved_latitude", 0f)
-        val savedLongitude = sharedPreferences.getFloat("saved_longitude", 0f)
-        
-        if (hasSavedLocation && savedLatitude != 0f && savedLongitude != 0f) {
-            Log.d("MainActivity", "Found saved location before UI setup: lat=$savedLatitude, lon=$savedLongitude")
-        }
-
         setContent {
             Log.d("MainActivity", "Starting setContent")
             
@@ -383,9 +401,23 @@ class MainActivity : ComponentActivity() {
 
             // Nếu đã có quyền vị trí, lấy vị trí sau khi UI đã hiển thị
             LaunchedEffect(Unit) {
-                delay(1000) // Chờ 1 giây để UI hiển thị trước
+                delay(500) // Giảm delay xuống chỉ còn 500ms để UI hiển thị trước
                 Log.d("MainActivity", "Checking location permission after UI setup")
-                if (ContextCompat.checkSelfPermission(this@MainActivity, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED) {
+                
+                // Tự động lấy vị trí khi không có thành phố nào
+                if (viewModel.citiesList.isEmpty()) {
+                    Log.d("MainActivity", "Không có thành phố nào, tự động lấy vị trí")
+                    if (ContextCompat.checkSelfPermission(this@MainActivity, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED) {
+                        checkGpsAndPrompt()
+                        getLocation() // Sử dụng getLocation thay vì testGetLocation
+                        isLocationRequested = true
+                    } else {
+                        // Yêu cầu quyền vị trí
+                        requestLocationPermission()
+                    }
+                }
+                // Vẫn giữ lại trường hợp kiểm tra có quyền mà chưa yêu cầu
+                else if (ContextCompat.checkSelfPermission(this@MainActivity, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED) {
                     if (!isLocationRequested) {
                         Log.d("MainActivity", "Location permission granted but location not requested yet, getting location now")
                         checkGpsAndPrompt()
@@ -401,13 +433,13 @@ class MainActivity : ComponentActivity() {
             
             // Force-check if we have empty data but permissions
             LaunchedEffect(Unit) {
-                delay(3000) // Wait for 3 seconds
-                Log.d("MainActivity", "3-second check: Cities: ${viewModel.citiesList.size}, Current city: '${viewModel.currentCity}'")
+                delay(2000) // Giảm xuống 2 giây thay vì 3 giây
+                Log.d("MainActivity", "2-second check: Cities: ${viewModel.citiesList.size}, Current city: '${viewModel.currentCity}'")
                 
                 // If we have permission but no data, try to get location again
                 if (viewModel.citiesList.isEmpty() && 
                     ContextCompat.checkSelfPermission(this@MainActivity, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED) {
-                    Log.d("MainActivity", "We have permission but no data after 3 seconds, trying again")
+                    Log.d("MainActivity", "We have permission but no data after 2 seconds, trying again")
                     fusedLocationClient.flushLocations() // Force clear cache
                     getLocation() // Try again
                 }
@@ -432,23 +464,24 @@ class MainActivity : ComponentActivity() {
         super.onStart()
         Log.d("MainActivity", "onStart called. Setting fallback timer")
         
-        // Set a fallback timer to ensure user sees some data
+        // Đặt timer để đảm bảo người dùng luôn thấy thông báo yêu cầu quyền vị trí nếu chưa có thành phố
         Handler(Looper.getMainLooper()).postDelayed({
             viewModel?.let { vm ->
                 if (vm.citiesList.isEmpty()) {
-                    Log.d("MainActivity", "FALLBACK: Adding default city (Hanoi) after timeout")
-                    // Add Hanoi as a fallback
-                    val hanoiCity = City(
-                        name = "Hà Nội",
-                        latitude = 21.0278,
-                        longitude = 105.8342
-                    )
-                    vm.addCity(hanoiCity)
+                    Log.d("MainActivity", "Danh sách thành phố vẫn trống sau timeout")
+                    // Yêu cầu quyền vị trí nếu chưa có
+                    if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
+                        requestLocationPermission()
+                        Toast.makeText(this, "Ứng dụng cần quyền vị trí để hiển thị thời tiết tại vị trí của bạn", Toast.LENGTH_LONG).show()
+                    } else {
+                        // Nếu đã có quyền nhưng vẫn chưa có dữ liệu, thử lấy vị trí trực tiếp
+                        getLocation() // Sử dụng getLocation thay vì testGetLocation
+                    }
                 } else {
                     Log.d("MainActivity", "No fallback needed, cities list has ${vm.citiesList.size} items")
                 }
             }
-        }, 5000) // Wait 5 seconds
+        }, 3000) // Giảm xuống 3 giây thay vì 5 giây
     }
 
     override fun onResume() {
@@ -548,10 +581,17 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun fetchCityName(location: Location, viewModel: WeatherViewModel) {
+        // Log chi tiết tọa độ nhận được
+        Log.i("LocationTest", "Tọa độ nhận được: lat=${location.latitude}, lon=${location.longitude}, độ chính xác=${location.accuracy}m")
+        
+        // Lưu vị trí vào preferences để có thể sử dụng sau này
         val sharedPreferences = getSharedPreferences("WeatherPrefs", Context.MODE_PRIVATE)
         with(sharedPreferences.edit()) {
             putFloat("latitude", location.latitude.toFloat())
             putFloat("longitude", location.longitude.toFloat())
+            putFloat("saved_latitude", location.latitude.toFloat())
+            putFloat("saved_longitude", location.longitude.toFloat())
+            putBoolean("has_saved_location", true)
             apply()
         }
 
@@ -563,7 +603,9 @@ class MainActivity : ComponentActivity() {
                 latitude = location.latitude,
                 longitude = location.longitude
             )
-            viewModel.addCity(city)
+            
+            // Luôn thêm thành phố mới vào đầu danh sách và cập nhật
+            viewModel.addCity(city, true)
             
             // Vẫn cập nhật thành phố hiện tại ngay cả khi không có internet
             viewModel.updateCurrentCity("Vị trí hiện tại")
@@ -574,26 +616,51 @@ class MainActivity : ComponentActivity() {
             try {
                 val apiKey = "183500a3f01b45a5b6076845dae351b3"
                 val url = "https://api.geoapify.com/v1/geocode/reverse?lat=${location.latitude}&lon=${location.longitude}&lang=vi&format=json&apiKey=$apiKey"
+                Log.i("LocationTest", "Gọi API Geoapify với URL: $url")
+                
+                // Tạo client với timeout ngắn hơn để tránh chờ đợi quá lâu
+                val client = OkHttpClient.Builder()
+                    .connectTimeout(3, TimeUnit.SECONDS)  // Giảm từ mặc định xuống 3 giây
+                    .readTimeout(3, TimeUnit.SECONDS)     // Giảm từ mặc định xuống 3 giây
+                    .build()
+                
                 val request = Request.Builder().url(url).build()
-                val client = OkHttpClient()
                 val response = client.newCall(request).execute()
                 val responseBody = response.body?.string()
 
                 if (response.isSuccessful && responseBody != null) {
+                    // Log toàn bộ response nhận được từ Geoapify
+                    Log.i("LocationTest", "Response từ Geoapify: $responseBody")
+                    
                     val jsonObject = JSONObject(responseBody)
-                    val features = jsonObject.getJSONArray("features")
+                    val features = jsonObject.getJSONArray("results")
                     
                     var locationName = "Vị trí hiện tại"
+                    var countryName: String? = null
                     var detailedArea = ""
                     
                     if (features.length() > 0) {
                         val firstFeature = features.getJSONObject(0)
-                        val properties = firstFeature.getJSONObject("properties")
+                        val properties = firstFeature
+                        
+                        // Log thông tin chi tiết từng trường
+                        Log.i("LocationTest", "Thông tin chi tiết vị trí:")
+                        Log.i("LocationTest", "- country: ${properties.optString("country", "N/A")}")
+                        Log.i("LocationTest", "- state: ${properties.optString("state", "N/A")}")
+                        Log.i("LocationTest", "- county: ${properties.optString("county", "N/A")}")
+                        Log.i("LocationTest", "- city: ${properties.optString("city", "N/A")}")
+                        Log.i("LocationTest", "- suburb: ${properties.optString("suburb", "N/A")}")
+                        Log.i("LocationTest", "- quarter: ${properties.optString("quarter", "N/A")}")
+                        Log.i("LocationTest", "- street: ${properties.optString("street", "N/A")}")
+                        Log.i("LocationTest", "- formatted: ${properties.optString("formatted", "N/A")}")
+                        
+                        // Lấy tên quốc gia
+                        countryName = properties.optString("country", null)
                         
                         // Extract location details in order of preference
-                        val district = properties.optString("district", "")
-                        val suburb = properties.optString("suburb", "")
-                        val municipality = properties.optString("municipality", "")
+                        val district = properties.optString("suburb", "")
+                        val suburb = properties.optString("quarter", "")
+                        val municipality = properties.optString("county", "")
                         val city = properties.optString("city", "")
                         val county = properties.optString("county", "")
                         val state = properties.optString("state", "")
@@ -629,18 +696,21 @@ class MainActivity : ComponentActivity() {
                             locationName = state
                         }
                         
-                        Log.d("WeatherApp", "Chi tiết địa điểm: district=$district, suburb=$suburb, municipality=$municipality, city=$city")
+                        Log.d("WeatherApp", "Chi tiết địa điểm: suburb=$district, quarter=$suburb, county=$municipality, city=$city")
                     }
                     
                     Log.d("WeatherApp", "Tên địa điểm đã chọn: $locationName")
+                    Log.i("LocationTest", "Tên địa điểm cuối cùng đã chọn: $locationName")
 
                     withContext(Dispatchers.Main) {
                         val city = City(
                             name = locationName,
                             latitude = location.latitude,
-                            longitude = location.longitude
+                            longitude = location.longitude,
+                            country = countryName
                         )
-                        viewModel.addCity(city)
+                        // Thêm thành phố vào đầu danh sách và cập nhật
+                        viewModel.addCity(city, true)
                         
                         // Đảm bảo cập nhật ngay currentCity và tải dữ liệu thời tiết
                         viewModel.updateCurrentCity(locationName)
@@ -652,6 +722,7 @@ class MainActivity : ComponentActivity() {
                     }
                 } else {
                     Log.e("WeatherApp", "Lỗi gọi Geoapify API: ${response.code}")
+                    Log.e("LocationTest", "Lỗi gọi Geoapify API: ${response.code}, body: ${responseBody}")
                     withContext(Dispatchers.Main) {
                         val cityName = "Vị trí hiện tại"
                         val city = City(
@@ -659,7 +730,8 @@ class MainActivity : ComponentActivity() {
                             latitude = location.latitude,
                             longitude = location.longitude
                         )
-                        viewModel.addCity(city)
+                        // Thêm thành phố vào đầu danh sách và cập nhật
+                        viewModel.addCity(city, true)
                         
                         // Đảm bảo cập nhật ngay currentCity và tải dữ liệu thời tiết
                         viewModel.updateCurrentCity(cityName)
@@ -668,6 +740,7 @@ class MainActivity : ComponentActivity() {
                 }
             } catch (e: Exception) {
                 Log.e("WeatherApp", "Lỗi gọi Geoapify API: ${e.message}")
+                Log.e("LocationTest", "Exception khi gọi Geoapify API", e)
                 withContext(Dispatchers.Main) {
                     val cityName = "Vị trí hiện tại"
                     val city = City(
@@ -675,7 +748,8 @@ class MainActivity : ComponentActivity() {
                         latitude = location.latitude,
                         longitude = location.longitude
                     )
-                    viewModel.addCity(city)
+                    // Thêm thành phố vào đầu danh sách và cập nhật
+                    viewModel.addCity(city, true)
                     
                     // Đảm bảo cập nhật ngay currentCity và tải dữ liệu thời tiết
                     viewModel.updateCurrentCity(cityName)
@@ -774,13 +848,19 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun getLocation() {
+        Log.e("LocationTest", "getLocation() được gọi - bắt đầu quá trình lấy vị trí")
         try {
+            // Bỏ điều kiện kiểm tra danh sách thành phố
+            // Luôn cho phép lấy vị trí mới
+            
             if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
                 Log.e("MainActivity", "Quyền vị trí không được cấp")
+                Log.e("LocationTest", "Không thể lấy vị trí - quyền chưa được cấp")
                 return
             }
 
             Log.d("WeatherApp", "Bắt đầu lấy vị trí mới")
+            Log.e("LocationTest", "Đủ điều kiện để lấy vị trí, tiếp tục quy trình...")
             
             // Xóa cài đặt lastLocation để đảm bảo luôn lấy vị trí mới
             fusedLocationClient.flushLocations()
@@ -796,15 +876,12 @@ class MainActivity : ComponentActivity() {
                 .addOnSuccessListener { location ->
                     if (location != null) {
                         Log.d("WeatherApp", "Đã lấy được vị trí từ cache: ${location.latitude}, ${location.longitude}")
+                        Log.e("LocationTest", "Vị trí từ cache: lat=${location.latitude}, lon=${location.longitude}")
                         
-                        // Sử dụng vị trí từ cache chỉ khi chưa có dữ liệu
+                        // Sử dụng vị trí từ cache ngay cả khi đã có dữ liệu
                         viewModel?.let { vm ->
-                            if (vm.citiesList.isEmpty()) {
-                                Log.d("WeatherApp", "Dùng vị trí từ cache vì chưa có dữ liệu")
-                                fetchCityName(location, vm)
-                            } else {
-                                Log.d("WeatherApp", "Bỏ qua vị trí từ cache vì đã có dữ liệu")
-                            }
+                            Log.e("LocationTest", "Sử dụng vị trí từ cache để lấy tên thành phố")
+                            fetchCityName(location, vm)
                         }
                     } else {
                         Log.d("WeatherApp", "Không có vị trí trong cache")
@@ -863,10 +940,25 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun requestNewLocation() {
+        Log.i("LocationTest", "Bắt đầu requestNewLocation()")
+        
         val locationCallback = object : LocationCallback() {
             override fun onLocationResult(locationResult: LocationResult) {
                 val location = locationResult.lastLocation
                 if (location != null) {
+                    Log.i("LocationTest", "Đã nhận vị trí mới từ requestLocationUpdates:")
+                    Log.i("LocationTest", "- Tọa độ: lat=${location.latitude}, lon=${location.longitude}")
+                    Log.i("LocationTest", "- Độ chính xác: ${location.accuracy}m")
+                    Log.i("LocationTest", "- Thời gian: ${Date(location.time)}")
+                    Log.i("LocationTest", "- Provider: ${location.provider}")
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                        Log.i("LocationTest", "- Vertical accuracy: ${location.verticalAccuracyMeters}m")
+                    }
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                        val elapsedMs = SystemClock.elapsedRealtime() - location.elapsedRealtimeNanos / 1000000
+                        Log.i("LocationTest", "- Độ trễ: ${elapsedMs}ms")
+                    }
+                    
                     Log.d("WeatherApp", "Vị trí mới (chính xác): lat=${location.latitude}, lon=${location.longitude}")
                     
                     // Sử dụng viewModel từ setContent
@@ -888,35 +980,49 @@ class MainActivity : ComponentActivity() {
                     }
                 } else {
                     Log.e("WeatherApp", "Không thể lấy vị trí mới")
+                    Log.e("LocationTest", "onLocationResult trả về location=null")
                 }
                 fusedLocationClient.removeLocationUpdates(this)
+                Log.i("LocationTest", "Đã gọi removeLocationUpdates để ngừng cập nhật vị trí")
             }
         }
 
         try {
             locationRequest = com.google.android.gms.location.LocationRequest.create().apply {
                 priority = com.google.android.gms.location.LocationRequest.PRIORITY_HIGH_ACCURACY
-                interval = 5000 // 5 giây
-                fastestInterval = 2000 // 2 giây
+                interval = 1000 // Giảm xuống 1 giây
+                fastestInterval = 500 // Giảm xuống 500ms
                 numUpdates = 1 // Chỉ lấy vị trí một lần
-                maxWaitTime = 10000 // Thời gian chờ tối đa 10 giây
+                maxWaitTime = 5000 // Giảm thời gian chờ tối đa xuống 5 giây
             }
+            
+            Log.i("LocationTest", "Tạo locationRequest với:")
+            Log.i("LocationTest", "- priority: PRIORITY_HIGH_ACCURACY")
+            Log.i("LocationTest", "- interval: 1000ms")
+            Log.i("LocationTest", "- fastestInterval: 500ms")
+            Log.i("LocationTest", "- numUpdates: 1")
+            Log.i("LocationTest", "- maxWaitTime: 5000ms")
             
             // Đảm bảo flushLocations được gọi trước khi yêu cầu vị trí mới
             fusedLocationClient.flushLocations()
+            Log.i("LocationTest", "Đã gọi flushLocations()")
             
             Log.d("WeatherApp", "Đang yêu cầu vị trí mới...")
             fusedLocationClient.requestLocationUpdates(locationRequest, locationCallback, Looper.getMainLooper())
                 .addOnSuccessListener {
                     Log.d("WeatherApp", "Đã đăng ký nhận cập nhật vị trí thành công")
+                    Log.i("LocationTest", "requestLocationUpdates: Đăng ký thành công")
                 }
                 .addOnFailureListener { e ->
                     Log.e("WeatherApp", "Lỗi yêu cầu vị trí mới: ${e.message}")
+                    Log.e("LocationTest", "requestLocationUpdates failed", e)
                 }
         } catch (e: SecurityException) {
             Log.e("WeatherApp", "Lỗi quyền vị trí: ${e.message}")
+            Log.e("LocationTest", "SecurityException khi yêu cầu vị trí:", e)
         } catch (e: Exception) {
             Log.e("WeatherApp", "Lỗi không xác định khi yêu cầu vị trí: ${e.message}")
+            Log.e("LocationTest", "Exception không xác định khi yêu cầu vị trí:", e)
         }
     }
 
@@ -1192,30 +1298,46 @@ class MainActivity : ComponentActivity() {
         val sharedPreferences = getSharedPreferences("WeatherPrefs", Context.MODE_PRIVATE)
         val hasSavedLocation = sharedPreferences.getBoolean("has_saved_location", false)
         
-        // Nếu có vị trí đã lưu và viewModel chưa có thành phố nào hoặc thành phố hiện tại rỗng
-        if (hasSavedLocation && (viewModel.citiesList.isEmpty() || viewModel.currentCity.isEmpty())) {
+        // Nếu có vị trí đã lưu
+        if (hasSavedLocation) {
             val latitude = sharedPreferences.getFloat("saved_latitude", 0f).toDouble()
             val longitude = sharedPreferences.getFloat("saved_longitude", 0f).toDouble()
             
             if (latitude != 0.0 && longitude != 0.0) {
                 Log.d("WeatherApp", "Sử dụng vị trí đã lưu: lat=$latitude, lon=$longitude")
                 
-                // Tạo location object từ dữ liệu đã lưu
-                val location = Location("saved_location").apply {
-                    this.latitude = latitude
-                    this.longitude = longitude
-                }
-                
-                // Sử dụng vị trí đã lưu để lấy tên thành phố
-                fetchCityName(location, viewModel)
-                
                 // Đánh dấu đã sử dụng vị trí lưu trữ này
                 sharedPreferences.edit().putBoolean("has_saved_location", false).apply()
                 
-                Log.d("WeatherApp", "Đã sử dụng vị trí đã lưu và khởi động quá trình lấy dữ liệu")
+                // Chỉ sử dụng vị trí đã lưu nếu không có thành phố nào hoặc thành phố hiện tại rỗng
+                if (viewModel.citiesList.isEmpty() || viewModel.currentCity.isEmpty()) {
+                    // Tạo location object từ dữ liệu đã lưu
+                    val location = Location("saved_location").apply {
+                        this.latitude = latitude
+                        this.longitude = longitude
+                    }
+                    
+                    // Sử dụng vị trí đã lưu để lấy tên thành phố
+                    // Sử dụng thread riêng để không block UI thread
+                    Handler(Looper.getMainLooper()).post {
+                        fetchCityName(location, viewModel)
+                        Log.d("WeatherApp", "Đã sử dụng vị trí đã lưu và khởi động quá trình lấy dữ liệu")
+                    }
+                }
             }
         } else {
-            Log.d("WeatherApp", "Không có vị trí đã lưu hoặc ViewModel đã có dữ liệu")
+            Log.d("WeatherApp", "Không có vị trí đã lưu")
+            
+            // Nếu không có vị trí đã lưu và không có thành phố nào, thử lấy vị trí ngay lập tức
+            if (viewModel.citiesList.isEmpty() && 
+                ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED) {
+                Log.d("WeatherApp", "Không có vị trí đã lưu và không có thành phố, thử lấy vị trí mới")
+                
+                // Thực hiện trong thread riêng để không block UI
+                Handler(Looper.getMainLooper()).post {
+                    getLocation()
+                }
+            }
         }
     }
 }

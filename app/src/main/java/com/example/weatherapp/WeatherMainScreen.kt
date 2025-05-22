@@ -6,10 +6,10 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
-import android.content.SharedPreferences
 import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
 import android.util.Log
+import android.widget.Toast
 
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
@@ -82,6 +82,36 @@ import com.example.weatherapp.WeatherDataState
 import com.example.weatherapp.WeatherViewModel
 import com.example.weatherapp.UnitConverter
 
+import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.gestures.Orientation
+import androidx.compose.foundation.gestures.draggable
+import androidx.compose.foundation.gestures.rememberDraggableState
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.DragHandle
+import androidx.compose.material.icons.filled.MenuOpen
+import androidx.compose.material.SwipeToDismiss
+import androidx.compose.material.DismissDirection
+import androidx.compose.material.DismissValue
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.material.rememberDismissState
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.input.pointer.consumeAllChanges
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
+import java.util.Collections
+import android.Manifest
+import android.content.pm.PackageManager
+import android.location.LocationManager
+import androidx.core.content.ContextCompat
 
 // ========== Utility Functions ==========
 // Hàm kiểm tra mạng
@@ -745,6 +775,7 @@ fun getTilesForViewport(bounds: LatLngBounds, zoom: Int): List<Pair<Int, Int>> {
 @Composable
 fun WeatherRadarSection(city: City) {
     val context = LocalContext.current
+    val coroutineScope = rememberCoroutineScope() // Use a rememberCoroutineScope for better lifecycle management
     var radarOverlays by remember { mutableStateOf<Map<String, Bitmap?>>(emptyMap()) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
     var googleMap by remember { mutableStateOf<GoogleMap?>(null) }
@@ -773,51 +804,65 @@ fun WeatherRadarSection(city: City) {
     )
 
     // Function to load overlays for map tiles
-    suspend fun loadOverlaysForTiles(tiles: List<Pair<Int, Int>>, zoom: Int, layers: List<String>) {
-        val fetchedOverlays = mutableMapOf<String, Bitmap?>()
+    fun loadOverlaysForTiles(tiles: List<Pair<Int, Int>>, zoom: Int, layers: List<String>) {
+        coroutineScope.launch {
+            val fetchedOverlays = mutableMapOf<String, Bitmap?>()
 
-        withContext(Dispatchers.IO) {
-            tiles.forEach { (xTile, yTile) ->
-                layers.forEach { layer ->
-                    val key = "$layer-$zoom-$xTile-$yTile"
-                    if (!radarOverlays.containsKey(key)) {
-                        try {
-                            val url =
-                                "https://tile.openweathermap.org/map/$layer/$zoom/$xTile/$yTile.png?appid=$openWeatherMapApiKey"
-                            Log.d("WeatherRadarSection", "Loading tile from URL: $url")
-
-                            val bitmap = withContext(Dispatchers.IO) {
+            try {
+                withContext(Dispatchers.IO) {
+                    tiles.forEach { (xTile, yTile) ->
+                        layers.forEach { layer ->
+                            val key = "$layer-$zoom-$xTile-$yTile"
+                            if (!radarOverlays.containsKey(key)) {
                                 try {
-                                    val connection = URL(url).openConnection()
-                                    connection.connectTimeout = 5000
-                                    connection.readTimeout = 5000
-                                    BitmapFactory.decodeStream(connection.getInputStream())
+                                    val url =
+                                        "https://tile.openweathermap.org/map/$layer/$zoom/$xTile/$yTile.png?appid=$openWeatherMapApiKey"
+                                    Log.d("WeatherRadarSection", "Loading tile from URL: $url")
+
+                                    val bitmap = try {
+                                        val connection = URL(url).openConnection()
+                                        connection.connectTimeout = 5000
+                                        connection.readTimeout = 5000
+                                        BitmapFactory.decodeStream(connection.getInputStream())
+                                    } catch (e: Exception) {
+                                        Log.e(
+                                            "WeatherRadarSection",
+                                            "Error loading layer $layer at tile ($xTile, $yTile): ${e.message}"
+                                        )
+                                        // Filter out "coroutine scope left the composition" errors 
+                                        if (!e.message.toString().contains("coroutine scope left the composition")) {
+                                            errorMessage =
+                                                "Không thể tải dữ liệu ${weatherLayers.find { it.first == layer }?.second}: ${e.message}"
+                                        }
+                                        null
+                                    }
+                                    fetchedOverlays[key] = bitmap
                                 } catch (e: Exception) {
                                     Log.e(
                                         "WeatherRadarSection",
                                         "Error loading layer $layer at tile ($xTile, $yTile): ${e.message}"
                                     )
-                                    errorMessage =
-                                        "Không thể tải dữ liệu ${weatherLayers.find { it.first == layer }?.second}: ${e.message}"
+                                    // Filter out "coroutine scope left the composition" errors
+                                    if (!e.message.toString().contains("coroutine scope left the composition")) {
+                                        errorMessage =
+                                            "Không thể tải dữ liệu ${weatherLayers.find { it.first == layer }?.second}: ${e.message}"
+                                    }
                                     null
                                 }
                             }
-                            fetchedOverlays[key] = bitmap
-                        } catch (e: Exception) {
-                            Log.e(
-                                "WeatherRadarSection",
-                                "Error loading layer $layer at tile ($xTile, $yTile): ${e.message}"
-                            )
-                            errorMessage =
-                                "Không thể tải dữ liệu ${weatherLayers.find { it.first == layer }?.second}: ${e.message}"
-                            null
                         }
                     }
                 }
+                withContext(Dispatchers.Main) {
+                    radarOverlays = radarOverlays + fetchedOverlays
+                }
+            } catch (e: Exception) {
+                Log.e("WeatherRadarSection", "Error in loadOverlaysForTiles: ${e.message}")
+                // Filter out "coroutine scope left the composition" errors
+                if (!e.message.toString().contains("coroutine scope left the composition")) {
+                    errorMessage = "Lỗi tải dữ liệu bản đồ: ${e.message}"
+                }
             }
-        }
-        withContext(Dispatchers.Main) {
-            radarOverlays = radarOverlays + fetchedOverlays
         }
     }
 
@@ -863,9 +908,25 @@ fun WeatherRadarSection(city: City) {
     LaunchedEffect(googleMap, selectedLayer, currentTiles, currentZoom) {
         googleMap?.let { map ->
             val layersToDisplay = listOf(selectedLayer)
-
-            loadOverlaysForTiles(currentTiles, currentZoom, layersToDisplay)
-            addOverlaysToMap(map, currentTiles, currentZoom, layersToDisplay)
+            
+            try {
+                loadOverlaysForTiles(currentTiles, currentZoom, layersToDisplay)
+                addOverlaysToMap(map, currentTiles, currentZoom, layersToDisplay)
+            } catch (e: Exception) {
+                Log.e("WeatherRadarSection", "Error updating map: ${e.message}")
+            }
+        }
+    }
+    
+    // Cleanup when leaving the composition
+    DisposableEffect(Unit) {
+        onDispose {
+            // Clean up resources when the composable is disposed
+            overlaysOnMap.values.forEach { it.remove() }
+            overlaysOnMap.clear()
+            mapView?.onDestroy()
+            mapView = null
+            googleMap = null
         }
     }
 
@@ -999,11 +1060,9 @@ fun WeatherMainScreen(
     viewModel: WeatherViewModel = viewModel(
         factory = WeatherViewModelFactory(
             weatherDao = WeatherDatabase.getDatabase(LocalContext.current).weatherDao(),
-
             openMeteoService = RetrofitInstance.api,
             airQualityService = RetrofitInstance.airQualityApi,
             geoNamesService = RetrofitInstance.geoNamesApi
-
         )
     )
 ) {
@@ -1016,6 +1075,7 @@ fun WeatherMainScreen(
     var showSearchOverlay by remember { mutableStateOf(false) }
     var showSearchScreen by remember { mutableStateOf(false) }
     var showFilteredCitiesScreen by remember { mutableStateOf(false) }
+    var showCityManagementScreen by remember { mutableStateOf(false) }
     var isRefreshing by remember { mutableStateOf(false) }
     val swipeRefreshState = rememberSwipeRefreshState(isRefreshing)
 
@@ -1054,7 +1114,6 @@ fun WeatherMainScreen(
             "Mét (m)" -> UnitConverter.VisibilityUnit.M
             "Feet (ft)" -> UnitConverter.VisibilityUnit.FT
             else -> UnitConverter.VisibilityUnit.KM
-
         }
         Log.d("WeatherMainScreen", "Temperature Unit: $temperatureUnit")
         Log.d("WeatherMainScreen", "Wind Unit: $windSpeedUnit")
@@ -1062,180 +1121,188 @@ fun WeatherMainScreen(
         Log.d("WeatherMainScreen", "Visibility Unit: $visibilityUnit")
     }
 
-DisposableEffect(Unit) {
-    val receiver = object : BroadcastReceiver() {
-        override fun onReceive(context: Context, intent: Intent) {
-            if (intent.action == "com.example.weatherapp.UNIT_CHANGED") {
-                val unitType = intent.getStringExtra("unit_type")
-                val unitValue = intent.getStringExtra("unit_value")
-                Log.d("WeatherMainScreen", "Received unit change: $unitType = $unitValue")
-                when (unitType) {
-                    "Nhiệt độ" -> {
-                        temperatureUnit = when (unitValue) {
-                            "Độ C (°C)" -> UnitConverter.TemperatureUnit.CELSIUS
-                            "Độ F (°F)" -> UnitConverter.TemperatureUnit.FAHRENHEIT
-                            else -> UnitConverter.TemperatureUnit.CELSIUS
+    DisposableEffect(Unit) {
+        val receiver = object : BroadcastReceiver() {
+            override fun onReceive(context: Context, intent: Intent) {
+                if (intent.action == "com.example.weatherapp.UNIT_CHANGED") {
+                    val unitType = intent.getStringExtra("unit_type")
+                    val unitValue = intent.getStringExtra("unit_value")
+                    Log.d("WeatherMainScreen", "Received unit change: $unitType = $unitValue")
+                    when (unitType) {
+                        "Nhiệt độ" -> {
+                            temperatureUnit = when (unitValue) {
+                                "Độ C (°C)" -> UnitConverter.TemperatureUnit.CELSIUS
+                                "Độ F (°F)" -> UnitConverter.TemperatureUnit.FAHRENHEIT
+                                else -> UnitConverter.TemperatureUnit.CELSIUS
+                            }
                         }
-                    }
-                    "Gió" -> {
-                        windSpeedUnit = when (unitValue) {
-                            "Kilomet mỗi giờ (km/h)" -> UnitConverter.WindSpeedUnit.KMH
-                            "Thang đo Beaufort" -> UnitConverter.WindSpeedUnit.BEAUFORT
-                            "Mét mỗi giây (m/s)" -> UnitConverter.WindSpeedUnit.MS
-                            "Feet mỗi giây (ft/s)" -> UnitConverter.WindSpeedUnit.FTS
-                            "Dặm mỗi giờ (mph)" -> UnitConverter.WindSpeedUnit.MPH
-                            "Hải lý mỗi giờ (hải lý)" -> UnitConverter.WindSpeedUnit.KNOTS
-                            else -> UnitConverter.WindSpeedUnit.KMH
+                        "Gió" -> {
+                            windSpeedUnit = when (unitValue) {
+                                "Kilomet mỗi giờ (km/h)" -> UnitConverter.WindSpeedUnit.KMH
+                                "Thang đo Beaufort" -> UnitConverter.WindSpeedUnit.BEAUFORT
+                                "Mét mỗi giây (m/s)" -> UnitConverter.WindSpeedUnit.MS
+                                "Feet mỗi giây (ft/s)" -> UnitConverter.WindSpeedUnit.FTS
+                                "Dặm mỗi giờ (mph)" -> UnitConverter.WindSpeedUnit.MPH
+                                "Hải lý mỗi giờ (hải lý)" -> UnitConverter.WindSpeedUnit.KNOTS
+                                else -> UnitConverter.WindSpeedUnit.KMH
+                            }
                         }
-                    }
-                    "Áp suất không khí" -> {
-                        pressureUnit = when (unitValue) {
-                            "Hectopascal (hPa)" -> UnitConverter.PressureUnit.HPA
-                            "Millimet thủy ngân (mmHg)" -> UnitConverter.PressureUnit.MMHG
-                            "Inch thủy ngân (inHg)" -> UnitConverter.PressureUnit.INHG
-                            "Millibar (mb)" -> UnitConverter.PressureUnit.MB
-                            "Pound trên inch vuông (psi)" -> UnitConverter.PressureUnit.PSI
-                            else -> UnitConverter.PressureUnit.MMHG
+                        "Áp suất không khí" -> {
+                            pressureUnit = when (unitValue) {
+                                "Hectopascal (hPa)" -> UnitConverter.PressureUnit.HPA
+                                "Millimet thủy ngân (mmHg)" -> UnitConverter.PressureUnit.MMHG
+                                "Inch thủy ngân (inHg)" -> UnitConverter.PressureUnit.INHG
+                                "Millibar (mb)" -> UnitConverter.PressureUnit.MB
+                                "Pound trên inch vuông (psi)" -> UnitConverter.PressureUnit.PSI
+                                else -> UnitConverter.PressureUnit.MMHG
+                            }
                         }
-                    }
-                    "Tầm nhìn" -> {
-                        visibilityUnit = when (unitValue) {
-                            "Kilomet (km)" -> UnitConverter.VisibilityUnit.KM
-                            "Dặm (mi)" -> UnitConverter.VisibilityUnit.MI
-                            "Mét (m)" -> UnitConverter.VisibilityUnit.M
-                            "Feet (ft)" -> UnitConverter.VisibilityUnit.FT
-                            else -> UnitConverter.VisibilityUnit.KM
+                        "Tầm nhìn" -> {
+                            visibilityUnit = when (unitValue) {
+                                "Kilomet (km)" -> UnitConverter.VisibilityUnit.KM
+                                "Dặm (mi)" -> UnitConverter.VisibilityUnit.MI
+                                "Mét (m)" -> UnitConverter.VisibilityUnit.M
+                                "Feet (ft)" -> UnitConverter.VisibilityUnit.FT
+                                else -> UnitConverter.VisibilityUnit.KM
+                            }
                         }
                     }
                 }
             }
         }
+
+        val filter = IntentFilter("com.example.weatherapp.UNIT_CHANGED")
+        LocalBroadcastManager.getInstance(context).registerReceiver(receiver, filter)
+
+        onDispose {
+            LocalBroadcastManager.getInstance(context).unregisterReceiver(receiver)
+        }
     }
 
-    val filter = IntentFilter("com.example.weatherapp.UNIT_CHANGED")
-    LocalBroadcastManager.getInstance(context).registerReceiver(receiver, filter)
-
-    onDispose {
-        LocalBroadcastManager.getInstance(context).unregisterReceiver(receiver)
+    LaunchedEffect(pagerState.currentPage, cities.size) {
+        if (cities.isNotEmpty() && pagerState.currentPage < cities.size) {
+            viewModel.updateCurrentCity(cities[pagerState.currentPage].name)
+        }
     }
-}
 
-LaunchedEffect(pagerState.currentPage, cities.size) {
-    if (cities.isNotEmpty() && pagerState.currentPage < cities.size) {
-        viewModel.updateCurrentCity(cities[pagerState.currentPage].name)
-    }
-}
-
-Box(modifier = Modifier.fillMaxSize()) {
-    Scaffold(
-        topBar = {
-            TopBar(
-                context = context,
-                onSearchClick = { showSearchOverlay = true }
-            )
-        },
-        containerColor = Color.Transparent,
-        modifier = Modifier.fillMaxSize()
-    ) { innerPadding ->
-        SwipeRefresh(
-            state = swipeRefreshState,
-            onRefresh = {
-                if (cities.isNotEmpty() && pagerState.currentPage < cities.size) {
-                    isRefreshing = true
-                    coroutineScope.launch {
-                        val currentCityToRefresh = cities[pagerState.currentPage]
-                        viewModel.fetchWeatherAndAirQuality(
-                            currentCityToRefresh.name,
-                            currentCityToRefresh.latitude,
-                            currentCityToRefresh.longitude
-                        )
+    Box(modifier = Modifier.fillMaxSize()) {
+        Scaffold(
+            topBar = {
+                TopBar(
+                    context = context,
+                    onSearchClick = { showSearchOverlay = true },
+                    onManageCitiesClick = { showCityManagementScreen = true }
+                )
+            },
+            containerColor = Color.Transparent,
+            modifier = Modifier.fillMaxSize()
+        ) { innerPadding ->
+            SwipeRefresh(
+                state = swipeRefreshState,
+                onRefresh = {
+                    if (cities.isNotEmpty() && pagerState.currentPage < cities.size) {
+                        isRefreshing = true
+                        coroutineScope.launch {
+                            val currentCityToRefresh = cities[pagerState.currentPage]
+                            viewModel.fetchWeatherAndAirQuality(
+                                currentCityToRefresh.name,
+                                currentCityToRefresh.latitude,
+                                currentCityToRefresh.longitude
+                            )
+                            isRefreshing = false
+                        }
+                    } else {
                         isRefreshing = false
                     }
-                } else {
-                    isRefreshing = false
-                }
-            },
-            indicator = { state, trigger ->
-                SwipeRefreshIndicator(
-                    state = state,
-                    refreshTriggerDistance = trigger,
-                    scale = true,
-                    backgroundColor = Color.White,
-                    contentColor = Color(0xFF5372dc),
-                    shape = RoundedCornerShape(50),
-                    largeIndication = true,
-                    modifier = Modifier
-                        .padding(innerPadding)
-                        .offset(y = 16.dp)
-                        .size(40.dp)
-                )
-            }
-        ) {
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .background(
-                        brush = Brush.verticalGradient(
-                            colors = listOf(Color(0xFFcbdfff), Color(0xFFfcdbf6))
-                        )
+                },
+                indicator = { state, trigger ->
+                    SwipeRefreshIndicator(
+                        state = state,
+                        refreshTriggerDistance = trigger,
+                        scale = true,
+                        backgroundColor = Color.White,
+                        contentColor = Color(0xFF5372dc),
+                        shape = RoundedCornerShape(50),
+                        largeIndication = true,
+                        modifier = Modifier
+                            .padding(innerPadding)
+                            .offset(y = 16.dp)
+                            .size(40.dp)
                     )
-                    .padding(innerPadding)
+                }
             ) {
-                if (cities.isEmpty()) {
-                    Box(
-                        modifier = Modifier.fillMaxSize(),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text(
-                            text = "Không có thành phố nào. Vui lòng thêm.",
-                            fontSize = 16.sp,
-                            color = Color(0xFF5372dc),
-                            textAlign = TextAlign.Center,
-                            modifier = Modifier.padding(horizontal = 30.dp)
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(
+                            brush = Brush.verticalGradient(
+                                colors = listOf(Color(0xFFcbdfff), Color(0xFFfcdbf6))
+                            )
                         )
-                    }
-                } else {
-                    HorizontalPager(
-                        count = cities.size,
-                        state = pagerState,
-                        modifier = Modifier.fillMaxSize()
-                    ) { page ->
-                        val city = cities[page]
-                        val weatherData = viewModel.weatherDataMap[city.name]
-                        val isNetworkAvailable = isNetworkAvailable(context)
-
-                        when {
-                            !isNetworkAvailable -> {
-                                OfflineScreen(lastUpdateTime = weatherData?.lastUpdateTime)
-                            }
-                            weatherData == null || (weatherData.timeList.isEmpty() && weatherData.dailyTimeList.isEmpty() && weatherData.currentAqi == null) || weatherData.errorMessage != null -> {
-                                LoadingOrErrorScreen(
-                                    errorMessage = weatherData?.errorMessage,
-                                    lastUpdateTime = weatherData?.lastUpdateTime
+                        .padding(innerPadding)
+                ) {
+                    if (cities.isEmpty()) {
+                        Box(
+                            modifier = Modifier.fillMaxSize(),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Column(
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                modifier = Modifier.padding(horizontal = 30.dp)
+                            ) {
+                                CircularProgressIndicator(color = Color(0xFF5372dc))
+                                Spacer(modifier = Modifier.height(16.dp))
+                                Text(
+                                    text = "Đang tìm vị trí của bạn...",
+                                    fontSize = 16.sp,
+                                    color = Color(0xFF5372dc),
+                                    textAlign = TextAlign.Center
                                 )
                             }
-                            else -> {
-                                val currentDate = LocalDate.now()
-                                val dateFormatter = remember { DateTimeFormatter.ofPattern("E, dd MMM") }
-                                val currentDateStr = remember(currentDate) { currentDate.format(dateFormatter) }
-                                val currentAqi = weatherData.currentAqi
+                        }
+                    } else {
+                        HorizontalPager(
+                            count = cities.size,
+                            state = pagerState,
+                            modifier = Modifier.fillMaxSize()
+                        ) { page ->
+                            val city = cities[page]
+                            val weatherData = viewModel.weatherDataMap[city.name]
+                            val isNetworkAvailable = isNetworkAvailable(context)
 
-                                LazyColumn(
-                                    modifier = Modifier
-                                        .fillMaxSize()
-                                        .padding(horizontal = 30.dp),
-                                    verticalArrangement = Arrangement.spacedBy(24.dp),
-                                    contentPadding = PaddingValues(bottom = 30.dp)
-                                ) {
-                                    item { CurrentWeatherSection(city, weatherData, viewModel, temperatureUnit) }
-                                    item { AdditionalInfoSection(weatherData, viewModel, windSpeedUnit) }
-                                    item { HourlyForecastSection(city, weatherData, viewModel, currentDateStr, temperatureUnit) }
-                                    item { DailyForecastSection(city, weatherData, viewModel, temperatureUnit) }
-                                    item { AirQualitySection(aqi = currentAqi) }
-                                    item { OtherDetailsSection(weatherData, viewModel, temperatureUnit, windSpeedUnit, pressureUnit, visibilityUnit) }
-                                    item { WeatherRadarSection(city) }
-                                    item { LastUpdateSection(weatherData) }
-                                    item { Spacer(modifier = Modifier.height(20.dp)) }
+                            when {
+                                !isNetworkAvailable -> {
+                                    OfflineScreen(lastUpdateTime = weatherData?.lastUpdateTime)
+                                }
+                                weatherData == null || (weatherData.timeList.isEmpty() && weatherData.dailyTimeList.isEmpty() && weatherData.currentAqi == null) || weatherData.errorMessage != null -> {
+                                    LoadingOrErrorScreen(
+                                        errorMessage = weatherData?.errorMessage,
+                                        lastUpdateTime = weatherData?.lastUpdateTime
+                                    )
+                                }
+                                else -> {
+                                    val currentDate = LocalDate.now()
+                                    val dateFormatter = remember { DateTimeFormatter.ofPattern("E, dd MMM") }
+                                    val currentDateStr = remember(currentDate) { currentDate.format(dateFormatter) }
+                                    val currentAqi = weatherData.currentAqi
+
+                                    LazyColumn(
+                                        modifier = Modifier
+                                            .fillMaxSize()
+                                            .padding(horizontal = 30.dp),
+                                        verticalArrangement = Arrangement.spacedBy(24.dp),
+                                        contentPadding = PaddingValues(bottom = 30.dp)
+                                    ) {
+                                        item { CurrentWeatherSection(city, weatherData, viewModel, temperatureUnit) }
+                                        item { AdditionalInfoSection(weatherData, viewModel, windSpeedUnit) }
+                                        item { HourlyForecastSection(city, weatherData, viewModel, currentDateStr, temperatureUnit) }
+                                        item { DailyForecastSection(city, weatherData, viewModel, temperatureUnit) }
+                                        item { AirQualitySection(aqi = currentAqi) }
+                                        item { OtherDetailsSection(weatherData, viewModel, temperatureUnit, windSpeedUnit, pressureUnit, visibilityUnit) }
+                                        item { WeatherRadarSection(city) }
+                                        item { LastUpdateSection(weatherData) }
+                                        item { Spacer(modifier = Modifier.height(20.dp)) }
+                                    }
                                 }
                             }
                         }
@@ -1243,34 +1310,276 @@ Box(modifier = Modifier.fillMaxSize()) {
                 }
             }
         }
-    }
 
-    if (showSearchOverlay) {
-        SearchOverlay(
-            onBackClick = { showSearchOverlay = false },
-            onFilterClick = {
-                showSearchOverlay = false
-                showSearchScreen = true
-            },
-            onDismiss = {
-                viewModel.clearSearch()
-                showSearchOverlay = false
-            },
-            viewModel = viewModel
-        )
-    }
-    if (showSearchScreen) {
-        SearchScreen(
-            onBackClick = {
-                showSearchScreen = false
-            },
-            onDismiss = { showSearchScreen = false },
-            onShowFilteredResults = { showFilteredCitiesScreen = true },
-            viewModel = viewModel
-        )
+        if (showSearchOverlay) {
+            SearchOverlay(
+                onBackClick = { showSearchOverlay = false },
+                onFilterClick = {
+                    showSearchOverlay = false
+                    showSearchScreen = true
+                },
+                onDismiss = {
+                    viewModel.clearSearch()
+                    showSearchOverlay = false
+                },
+                viewModel = viewModel
+            )
+        }
+        if (showSearchScreen) {
+            SearchScreen(
+                onBackClick = {
+                    showSearchScreen = false
+                },
+                onDismiss = { showSearchScreen = false },
+                onShowFilteredResults = { showFilteredCitiesScreen = true },
+                viewModel = viewModel
+            )
+        }
+        
+        // Hiển thị màn hình kết quả lọc khi showFilteredCitiesScreen = true
+        if (showFilteredCitiesScreen) {
+            FilteredCitiesScreen(
+                onBackClick = { showFilteredCitiesScreen = false },
+                onDismiss = { showFilteredCitiesScreen = false },
+                viewModel = viewModel
+            )
+        }
+
+        // Hiển thị màn hình quản lý thành phố
+        if (showCityManagementScreen) {
+            CityManagementScreen(
+                onBackClick = { showCityManagementScreen = false },
+                viewModel = viewModel
+            )
+        }
     }
 }
 
+// TopBar composable with city management button
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun TopBar(
+    context: Context,
+    onSearchClick: () -> Unit,
+    onManageCitiesClick: () -> Unit
+) {
+    TopAppBar(
+        title = { Text("Thời tiết", color = Color(0xFF5372dc)) },
+        navigationIcon = {
+            IconButton(onClick = onSearchClick) {
+                Icon(
+                    painter = painterResource(id = R.drawable.kinh_lup),
+                    contentDescription = "Tìm kiếm",
+                    tint = Color(0xFF5372dc)
+                )
+            }
+        },
+        actions = {
+            IconButton(onClick = onManageCitiesClick) {
+                Icon(
+                    painter = painterResource(id = R.drawable.drag_handle),
+                    contentDescription = "Quản lý thành phố",
+                    tint = Color(0xFF5372dc)
+                )
+            }
+            IconButton(onClick = {
+                val settingsIntent = Intent(context, SettingsActivity::class.java)
+                context.startActivity(settingsIntent)
+            }) {
+                Icon(
+                    painter = painterResource(id = R.drawable.setting),
+                    contentDescription = "Cài đặt",
+                    tint = Color(0xFF5372dc)
+                )
+            }
+        },
+        colors = TopAppBarDefaults.topAppBarColors(
+            containerColor = Color.White.copy(alpha = 0.8f)
+        )
+    )
 }
+
+// City Management Screen Composable - Simplified version without SwipeToDismiss
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun CityManagementScreen(
+    onBackClick: () -> Unit,
+    viewModel: WeatherViewModel
+) {
+    var cities by remember { mutableStateOf(viewModel.citiesList) }
+    val scope = rememberCoroutineScope()
+
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(
+                brush = Brush.verticalGradient(
+                    colors = listOf(Color(0xFFcbdfff), Color(0xFFfcdbf6))
+                )
+            )
+    ) {
+        Column(modifier = Modifier.fillMaxSize()) {
+            // Top Bar
+            TopAppBar(
+                title = { Text("Quản lý thành phố", color = Color(0xFF5372dc)) },
+                navigationIcon = {
+                    IconButton(onClick = onBackClick) {
+                        Icon(
+                            painter = painterResource(id = R.drawable.ic_back),
+                            contentDescription = "Quay lại",
+                            tint = Color(0xFF5372dc)
+                        )
+                    }
+                },
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = Color.White.copy(alpha = 0.8f)
+                )
+            )
+
+            // Instructions text
+            Text(
+                text = "Quản lý danh sách thành phố của bạn",
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 8.dp),
+                fontSize = 14.sp,
+                color = Color(0xFF5372dc),
+                textAlign = TextAlign.Center
+            )
+
+            // City list
+            LazyColumn(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(horizontal = 16.dp, vertical = 8.dp)
+            ) {
+                itemsIndexed(
+                    items = cities,
+                    key = { _, item -> item.name }
+                ) { index, city ->
+                    SimpleCityItem(
+                        city = city,
+                        weatherData = viewModel.weatherDataMap[city.name],
+                        onDelete = {
+                            scope.launch {
+                                viewModel.deleteCity(city.name)
+                                cities = viewModel.citiesList
+                            }
+                        }
+                    )
+                    
+                    Spacer(modifier = Modifier.height(8.dp))
+                }
+
+                // Show empty state if no cities
+                if (cities.isEmpty()) {
+                    item {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(200.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = "Không có thành phố nào. Thêm thành phố từ tính năng tìm kiếm.",
+                                textAlign = TextAlign.Center,
+                                color = Color(0xFF5372dc),
+                                fontSize = 16.sp
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+// Simplified City Item Composable for management screen
+@Composable
+fun SimpleCityItem(
+    city: City,
+    weatherData: WeatherDataState?,
+    onDelete: () -> Unit
+) {
+    val currentWeatherCode = weatherData?.weatherCodeList?.getOrNull(0) ?: 0
+    val currentTemp = weatherData?.temperatureList?.getOrNull(0)?.toInt() ?: 0
+    val weatherIcon = getWeatherIcon(currentWeatherCode)
+    
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .shadow(
+                elevation = 2.dp,
+                shape = RoundedCornerShape(10.dp)
+            ),
+        colors = CardDefaults.cardColors(
+            containerColor = Color.White.copy(alpha = 0.8f)
+        ),
+        shape = RoundedCornerShape(10.dp)
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(vertical = 12.dp, horizontal = 16.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            // Drag handle icon (decorative only in this simplified version)
+            Icon(
+                painter = painterResource(id = R.drawable.drag_handle),
+                contentDescription = null,
+                tint = Color(0xFF5372dc),
+                modifier = Modifier.padding(end = 16.dp)
+            )
+            
+            // City info
+            Column(
+                modifier = Modifier.weight(1f)
+            ) {
+                Text(
+                    text = city.name,
+                    fontSize = 16.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Color(0xFF5372dc)
+                )
+                Text(
+                    text = city.country ?: "",
+                    fontSize = 12.sp,
+                    color = Color(0xFF5372dc).copy(alpha = 0.7f)
+                )
+            }
+            
+            // Weather info if available
+            if (weatherData != null) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "$currentTemp°",
+                        fontSize = 20.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color(0xFF5372dc)
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Image(
+                        painter = painterResource(id = weatherIcon),
+                        contentDescription = null,
+                        modifier = Modifier.size(30.dp)
+                    )
+                }
+            }
+            
+            // Delete button
+            IconButton(onClick = onDelete) {
+                Icon(
+                    painter = painterResource(id = R.drawable.ic_delete),
+                    contentDescription = "Xóa",
+                    tint = Color.Red.copy(alpha = 0.7f)
+                )
+            }
+        }
+    }
+}
+
+
 
 

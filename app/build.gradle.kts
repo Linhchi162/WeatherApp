@@ -95,6 +95,16 @@ dependencies {
 
     implementation("com.squareup.okhttp3:okhttp:4.12.0") // Hoặc phiên bản bạn dùng
     implementation("com.squareup.okhttp3:logging-interceptor:4.12.0") // <<-- Đảm bảo dòng này có và cùng phiên bản
+    
+    // Add Material Icons for filled, outlined, rounded, sharp, and two-tone
+    implementation("androidx.compose.material:material-icons-core:1.5.0")
+    implementation("androidx.compose.material:material-icons-extended:1.5.0")
+    
+    // Add foundation for gestures and interactions
+    implementation("androidx.compose.foundation:foundation:1.5.0")
+    
+    // Make sure material3 has the right APIs for SwipeToDismiss and rememberDismissState
+    implementation("androidx.compose.material3:material3:1.2.1")
 }
 
 

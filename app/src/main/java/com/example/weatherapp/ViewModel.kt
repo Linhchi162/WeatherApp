@@ -96,7 +96,7 @@ class WeatherViewModel(
     private var searchJob: Job? = null // Job để quản lý coroutine tìm kiếm (cho debounce)
 
     // State cho bộ lọc
-    var selectedFilterCountry by mutableStateOf("Việt Nam")
+    var selectedFilterCountry by mutableStateOf("")
         private set
     var temperatureFilterRange by mutableStateOf(-20f..50f)
         private set
@@ -117,22 +117,38 @@ class WeatherViewModel(
         // Khởi tạo filteredCities ban đầu bằng toàn bộ cities (sẽ là rỗng)
         filteredCities = cities
         
-        // Không tự động lấy dữ liệu thời tiết cho bất kỳ thành phố nào
-        // Chỉ lấy dữ liệu khi người dùng chọn vị trí
+        // Không thêm thành phố mặc định nữa, để người dùng luôn phải lấy vị trí thực
+        Log.d("WeatherViewModel", "Khởi tạo ViewModel - không có thành phố mặc định")
+        
+        // Khởi tạo trạng thái ban đầu
+        cities = emptyList() // Danh sách rỗng
+        weatherDataMap = emptyMap() // Map rỗng
+        currentCity = "" // Không có thành phố hiện tại
     }
 
-    fun addCity(city: City) {
+    // Hàm thêm thành phố với tùy chọn thêm vào đầu danh sách
+    fun addCity(city: City, isPrimary: Boolean = false) {
         if (cities.none { it.name == city.name }) {
-            Log.d("WeatherViewModel", "Adding city: ${city.name}")
+            Log.d("WeatherViewModel", "Adding city: ${city.name}, isPrimary: $isPrimary")
+            
             // Cập nhật state trước để UI phản hồi nhanh
-            val updatedCities = cities + city
+            val updatedCities = if (isPrimary) {
+                // Thêm vào đầu danh sách nếu là isPrimary
+                listOf(city) + cities 
+            } else {
+                // Thêm vào cuối danh sách theo mặc định
+                cities + city
+            }
             cities = updatedCities
+            
             // Cập nhật map (có thể thêm entry rỗng hoặc loading)
             weatherDataMap = weatherDataMap.toMutableMap().apply {
                 put(city.name, WeatherDataState()) // Thêm entry mới
             }
+            
             // Fetch data cho thành phố mới
             fetchWeatherAndAirQuality(city.name, city.latitude, city.longitude)
+            
             // Cập nhật currentCity
             updateCurrentCity(city.name)
             
@@ -920,12 +936,14 @@ class WeatherViewModel(
             isFiltering = true
             
             try {
-                Log.d("WeatherViewModel", "Bắt đầu lọc với quốc gia: $selectedFilterCountry")
+                Log.d("WeatherViewModel", "Bắt đầu lọc với quốc gia: ${if(selectedFilterCountry.isEmpty()) "<không chọn>" else selectedFilterCountry}")
                 
-                // Luôn tìm kiếm thành phố của quốc gia đã chọn
-                fetchCitiesByCountryWithGeoNames(selectedFilterCountry)
-                // Tạm dừng lâu hơn (2 giây) để đảm bảo kết quả được cập nhật
-                delay(2000)
+                // Chỉ tìm kiếm thành phố của quốc gia cụ thể khi đã chọn quốc gia
+                if (selectedFilterCountry.isNotEmpty()) {
+                    fetchCitiesByCountryWithGeoNames(selectedFilterCountry)
+                    // Tạm dừng lâu hơn (3 giây) để đảm bảo kết quả được cập nhật
+                    delay(3000)
+                }
                 
                 Log.d("WeatherViewModel", "Danh sách thành phố: ${cities.map { "${it.name} (${it.country})" }}")
                 
@@ -943,43 +961,52 @@ class WeatherViewModel(
                     "Pháp" to listOf("France")
                 )
                 
+                // Log thông tin quốc gia đã chọn và biến thể nếu có
+                if (selectedFilterCountry.isNotEmpty()) {
+                    Log.d("WeatherViewModel", "Biến thể của quốc gia: ${countryVariants[selectedFilterCountry] ?: "không có biến thể"}")
+                }
+                
                 // Lọc trên main thread để tránh race condition với UI
                 val result = cities.filter { city ->
-                    // Lọc theo quốc gia
-                    val matchesCountry = run {
-                        val cityCountry = city.country?.lowercase()
+                    // Lọc theo quốc gia (bỏ qua nếu selectedFilterCountry rỗng)
+                    val matchesCountry = if (selectedFilterCountry.isEmpty()) {
+                        true // Không lọc theo quốc gia nếu không chọn quốc gia
+                    } else {
+                        val cityCountry = city.country?.trim()
                         
-                        if (cityCountry == null) {
+                        if (cityCountry == null || cityCountry.isEmpty()) {
                             // Nếu thành phố không có thông tin quốc gia, bỏ qua
                             Log.d("WeatherViewModel", "Thành phố ${city.name} không có thông tin quốc gia")
                             false
                         } else {
                             // Kiểm tra tên quốc gia chính xác
-                            val directMatch = cityCountry.equals(selectedFilterCountry.lowercase(), ignoreCase = true)
+                            val directMatch = cityCountry.equals(selectedFilterCountry, ignoreCase = true)
                             
                             // Kiểm tra các biến thể tên quốc gia
                             val variantMatch = countryVariants[selectedFilterCountry]?.any { 
-                                cityCountry.equals(it.lowercase(), ignoreCase = true) 
+                                cityCountry.equals(it, ignoreCase = true)
                             } ?: false
                             
                             // Kiểm tra nếu biến thể của quốc gia thành phố khớp với lựa chọn
                             val reverseMatch = countryVariants.entries.any { (key, variants) ->
-                                key.lowercase() == selectedFilterCountry.lowercase() && 
-                                variants.any { it.lowercase() == cityCountry }
+                                key.equals(selectedFilterCountry, ignoreCase = true) && 
+                                variants.any { it.equals(cityCountry, ignoreCase = true) }
                             }
                             
+                            // Log chi tiết kết quả so khớp cho mỗi thành phố
                             val result = directMatch || variantMatch || reverseMatch
-                            Log.d("WeatherViewModel", "Thành phố ${city.name} có quốc gia $cityCountry: kết quả=$result")
+                            Log.d("WeatherViewModel", "Thành phố ${city.name} có quốc gia '$cityCountry': directMatch=$directMatch, variantMatch=$variantMatch, reverseMatch=$reverseMatch, kết quả=$result")
                             result
                         }
                     }
                     
                     // Lấy dữ liệu thời tiết hiện tại của thành phố
                     val weatherData = weatherDataMap[city.name]
-                    val index = if (weatherData != null) getCurrentIndex(city.name) else -1
+                    val index = if (weatherData != null && weatherData.timeList.isNotEmpty()) getCurrentIndex(city.name) else -1
                     
                     // Nếu không có dữ liệu, chỉ lọc theo quốc gia
                     if (weatherData == null || index < 0 || weatherData.timeList.isEmpty()) {
+                        Log.d("WeatherViewModel", "Thành phố ${city.name} không có dữ liệu thời tiết, chỉ lọc theo quốc gia: $matchesCountry")
                         return@filter matchesCountry
                     }
                     
@@ -994,7 +1021,7 @@ class WeatherViewModel(
                         currentWeatherCode == null -> "Không xác định"
                         currentWeatherCode == 0 || currentWeatherCode == 1 -> "Nắng"
                         currentWeatherCode in 51..86 -> "Mưa"
-                        currentWeatherCode == 2 || currentWeatherCode == 3 -> "Nhiều mây"
+                        currentWeatherCode == 2 || currentWeatherCode == 3 -> "Mây"
                         currentWeatherCode == 45 || currentWeatherCode == 48 -> "Sương mù"
                         currentWeatherCode in 71..86 -> "Tuyết"
                         else -> "Không xác định"
@@ -1023,6 +1050,9 @@ class WeatherViewModel(
                         currentWeatherState == weatherStateFilter
                     } else true
                     
+                    // Log chi tiết về điều kiện lọc
+                    Log.d("WeatherViewModel", "Thành phố ${city.name}: quốc gia=$matchesCountry, nhiệt=$matchesTemp ($currentTemp), gió=$matchesWind ($currentWindSpeed), ẩm=$matchesHumidity ($currentHumidity), thời tiết=$matchesWeatherState ($currentWeatherState)")
+                    
                     // Kết quả cuối cùng
                     matchesCountry && matchesTemp && matchesWind && matchesHumidity && matchesWeatherState
                 }
@@ -1031,12 +1061,6 @@ class WeatherViewModel(
                 
                 // Cập nhật state
                 filteredCities = result
-                
-                // Nếu không có kết quả, trực tiếp thêm các thành phố của quốc gia đã chọn
-                if (result.isEmpty()) {
-                    // BỎ HOÀN TOÀN phần thêm manualCities thủ công
-                    // filteredCities = result đã đủ
-                }
                 
             } catch (e: Exception) {
                 Log.e("WeatherViewModel", "Lỗi khi áp dụng bộ lọc: ${e.message}", e)
@@ -1279,6 +1303,24 @@ class WeatherViewModel(
     // Hàm fetchCitiesByCountry cũ sẽ gọi đến hàm mới
     fun fetchCitiesByCountry(country: String) {
         fetchCitiesByCountryWithGeoNames(country)
+    }
+
+    // Hàm mới để sắp xếp lại thứ tự thành phố
+    fun reorderCities(newCitiesList: List<City>) {
+        viewModelScope.launch {
+            Log.d("WeatherViewModel", "Đang sắp xếp lại thứ tự thành phố: ${newCitiesList.map { it.name }}")
+            
+            // Cập nhật danh sách cities
+            cities = newCitiesList
+            
+            // Nếu cần lưu trữ thứ tự này xuống DB, có thể thêm logic ở đây
+            // Ví dụ:
+            // withContext(Dispatchers.IO) {
+            //    saveCityOrderToDb(newCitiesList)
+            // }
+            
+            Log.d("WeatherViewModel", "Đã sắp xếp lại thứ tự thành phố thành công")
+        }
     }
 
 }
