@@ -21,6 +21,14 @@ import androidx.compose.foundation.lazy.LazyRow
 
 import androidx.compose.foundation.lazy.items // Import items for LazyColumn/LazyRow
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.AnimatedVisibility
 
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
@@ -91,7 +99,11 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.DragHandle
+import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.MenuOpen
+import androidx.compose.material.icons.filled.FilterList
+import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.LocationCity
 import androidx.compose.material.SwipeToDismiss
 import androidx.compose.material.DismissDirection
 import androidx.compose.material.DismissValue
@@ -103,6 +115,7 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material.rememberDismissState
 import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.consumeAllChanges
 import androidx.compose.foundation.lazy.items
@@ -658,11 +671,15 @@ fun OtherDetailsSection(weatherData: WeatherDataState, viewModel: WeatherViewMod
         // Chia thành các hàng, mỗi hàng 2 hoặc 3 item
         val infoItems = listOfNotNull(
             weatherData.uvList.getOrNull(index)?.let { Triple(R.drawable.uv, "Chỉ số UV", it.toInt().toString()) },
-            weatherData.feelsLikeList.getOrNull(index)?.let { Triple(R.drawable.feels_like, "Cảm giác như", "${it.toInt()}°") },
+            weatherData.feelsLikeList.getOrNull(index)?.let { 
+                val tempSymbol = if (temperatureUnit == UnitConverter.TemperatureUnit.CELSIUS) "°C" else "°F"
+                val convertedTemp = UnitConverter.convertTemperature(it, temperatureUnit).toInt()
+                Triple(R.drawable.feels_like, "Cảm giác như", "$convertedTemp$tempSymbol") 
+            },
             weatherData.humidityList.getOrNull(index)?.let { Triple(R.drawable.humidity2, "Độ ẩm", "${it.toInt()}%") },
-            weatherData.windSpeedList.getOrNull(index)?.let { Triple(R.drawable.ese_wind, "Gió", "${it.toInt()}km/h") },
-            weatherData.pressureList.getOrNull(index)?.let { Triple(R.drawable.air_pressure, "Áp suất", "${(it * 0.75006).toInt()}mmHg") },
-            weatherData.visibilityList.getOrNull(index)?.let { Triple(R.drawable.visibility, "Tầm nhìn", "${(it / 1000).toInt()}km") }
+            weatherData.windSpeedList.getOrNull(index)?.let { Triple(R.drawable.ese_wind, "Gió", UnitConverter.convertWindSpeed(it, windSpeedUnit)) },
+            weatherData.pressureList.getOrNull(index)?.let { Triple(R.drawable.air_pressure, "Áp suất", UnitConverter.convertPressure(it, pressureUnit)) },
+            weatherData.visibilityList.getOrNull(index)?.let { Triple(R.drawable.visibility, "Tầm nhìn", UnitConverter.convertVisibility(it, visibilityUnit)) }
         )
 
         infoItems.chunked(2).forEach { rowItems ->
@@ -1057,14 +1074,18 @@ fun WeatherRadarSection(city: City) {
 @Composable
 fun WeatherMainScreen(
     // Sử dụng factory để khởi tạo ViewModel với các dependencies cần thiết
-    viewModel: WeatherViewModel = viewModel(
-        factory = WeatherViewModelFactory(
-            weatherDao = WeatherDatabase.getDatabase(LocalContext.current).weatherDao(),
-            openMeteoService = RetrofitInstance.api,
-            airQualityService = RetrofitInstance.airQualityApi,
-            geoNamesService = RetrofitInstance.geoNamesApi
-        )
-    )
+    viewModel: WeatherViewModel = run {
+        val context = LocalContext.current
+        val factory = remember(context) {
+            WeatherViewModelFactory(
+                weatherDao = WeatherDatabase.getDatabase(context).weatherDao(),
+                openMeteoService = RetrofitInstance.api,
+                airQualityService = RetrofitInstance.airQualityApi,
+                geoNamesService = RetrofitInstance.geoNamesApi
+            )
+        }
+        viewModel(factory = factory)
+    }
 ) {
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
@@ -1076,6 +1097,7 @@ fun WeatherMainScreen(
     var showSearchScreen by remember { mutableStateOf(false) }
     var showFilteredCitiesScreen by remember { mutableStateOf(false) }
     var showCityManagementScreen by remember { mutableStateOf(false) }
+    var showSidebar by remember { mutableStateOf(false) }
     var isRefreshing by remember { mutableStateOf(false) }
     val swipeRefreshState = rememberSwipeRefreshState(isRefreshing)
 
@@ -1190,8 +1212,8 @@ fun WeatherMainScreen(
             topBar = {
                 TopBar(
                     context = context,
-                    onSearchClick = { showSearchOverlay = true },
-                    onManageCitiesClick = { showCityManagementScreen = true }
+                    onManageCitiesClick = { showCityManagementScreen = true },
+                    onMenuClick = { showSidebar = true }
                 )
             },
             containerColor = Color.Transparent,
@@ -1261,12 +1283,14 @@ fun WeatherMainScreen(
                             }
                         }
                     } else {
+                        Log.d("WeatherMainScreen", "Rendering HorizontalPager với ${cities.size} thành phố")
                         HorizontalPager(
                             count = cities.size,
                             state = pagerState,
                             modifier = Modifier.fillMaxSize()
                         ) { page ->
                             val city = cities[page]
+                            Log.d("WeatherMainScreen", "Rendering page $page cho thành phố: ${city.name}")
                             val weatherData = viewModel.weatherDataMap[city.name]
                             val isNetworkAvailable = isNetworkAvailable(context)
 
@@ -1332,16 +1356,25 @@ fun WeatherMainScreen(
                 },
                 onDismiss = { showSearchScreen = false },
                 onShowFilteredResults = { showFilteredCitiesScreen = true },
-                viewModel = viewModel
+                viewModel = viewModel,
+                temperatureUnit = temperatureUnit
             )
         }
         
         // Hiển thị màn hình kết quả lọc khi showFilteredCitiesScreen = true
         if (showFilteredCitiesScreen) {
             FilteredCitiesScreen(
-                onBackClick = { showFilteredCitiesScreen = false },
-                onDismiss = { showFilteredCitiesScreen = false },
-                viewModel = viewModel
+                onBackClick = { 
+                    viewModel.resetFilterResults() // Reset kết quả lọc
+                    showFilteredCitiesScreen = false 
+                },
+                onDismiss = { 
+                    viewModel.resetFilterResults() // Reset kết quả lọc
+                    showFilteredCitiesScreen = false 
+                },
+                viewModel = viewModel,
+                temperatureUnit = temperatureUnit,
+                windSpeedUnit = windSpeedUnit
             )
         }
 
@@ -1352,54 +1385,55 @@ fun WeatherMainScreen(
                 viewModel = viewModel
             )
         }
+
+        // Sidebar
+        SidebarOverlay(
+            isVisible = showSidebar,
+            onDismiss = { showSidebar = false },
+            onSettingsClick = {
+                showSidebar = false
+                val settingsIntent = Intent(context, SettingsActivity::class.java)
+                context.startActivity(settingsIntent)
+            },
+            onCityManagementClick = {
+                showSidebar = false
+                showCityManagementScreen = true
+            },
+                            onFilterClick = {
+                    showSidebar = false
+                    showSearchScreen = true
+                }
+        )
     }
 }
 
-// TopBar composable with city management button
+// TopBar composable with hamburger menu button
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun TopBar(
     context: Context,
-    onSearchClick: () -> Unit,
-    onManageCitiesClick: () -> Unit
+    onManageCitiesClick: () -> Unit,
+    onMenuClick: () -> Unit
 ) {
     TopAppBar(
-        title = { Text("Thời tiết", color = Color(0xFF5372dc)) },
+        title = { }, // Bỏ chữ "Thời tiết"
         navigationIcon = {
-            IconButton(onClick = onSearchClick) {
+            IconButton(onClick = onMenuClick) {
                 Icon(
-                    painter = painterResource(id = R.drawable.kinh_lup),
-                    contentDescription = "Tìm kiếm",
-                    tint = Color(0xFF5372dc)
+                    imageVector = Icons.Default.Menu,
+                    contentDescription = "Menu",
+                    tint = Color.White
                 )
             }
         },
-        actions = {
-            IconButton(onClick = onManageCitiesClick) {
-                Icon(
-                    painter = painterResource(id = R.drawable.drag_handle),
-                    contentDescription = "Quản lý thành phố",
-                    tint = Color(0xFF5372dc)
-                )
-            }
-            IconButton(onClick = {
-                val settingsIntent = Intent(context, SettingsActivity::class.java)
-                context.startActivity(settingsIntent)
-            }) {
-                Icon(
-                    painter = painterResource(id = R.drawable.setting),
-                    contentDescription = "Cài đặt",
-                    tint = Color(0xFF5372dc)
-                )
-            }
-        },
+        actions = { }, // Bỏ nút tìm kiếm
         colors = TopAppBarDefaults.topAppBarColors(
-            containerColor = Color.White.copy(alpha = 0.8f)
+            containerColor = Color.Transparent // Trong suốt để hiện gradient phía sau
         )
     )
 }
 
-// City Management Screen Composable - Simplified version without SwipeToDismiss
+// City Management Screen Composable - Simple version with search button
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun CityManagementScreen(
@@ -1407,7 +1441,13 @@ fun CityManagementScreen(
     viewModel: WeatherViewModel
 ) {
     var cities by remember { mutableStateOf(viewModel.citiesList) }
+    var showSearchOverlay by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
+    
+    // Theo dõi các thay đổi trong danh sách thành phố từ ViewModel
+    LaunchedEffect(viewModel.citiesList) {
+        cities = viewModel.citiesList
+    }
 
     Box(
         modifier = Modifier
@@ -1431,6 +1471,16 @@ fun CityManagementScreen(
                         )
                     }
                 },
+                actions = {
+                    // Nút tìm kiếm
+                    IconButton(onClick = { showSearchOverlay = true }) {
+                        Icon(
+                            painter = painterResource(id = R.drawable.kinh_lup),
+                            contentDescription = "Tìm kiếm thành phố",
+                            tint = Color(0xFF5372dc)
+                        )
+                    }
+                },
                 colors = TopAppBarDefaults.topAppBarColors(
                     containerColor = Color.White.copy(alpha = 0.8f)
                 )
@@ -1438,7 +1488,7 @@ fun CityManagementScreen(
 
             // Instructions text
             Text(
-                text = "Quản lý danh sách thành phố của bạn",
+                text = "Quản lý danh sách thành phố của bạn. Nhấn nút tìm kiếm để thêm thành phố mới.",
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(horizontal = 16.dp, vertical = 8.dp),
@@ -1490,6 +1540,21 @@ fun CityManagementScreen(
                     }
                 }
             }
+        }
+        
+        // SearchOverlay
+        if (showSearchOverlay) {
+            SearchOverlay(
+                onBackClick = { showSearchOverlay = false },
+                onFilterClick = { 
+                    // Có thể thêm logic để mở SearchScreen từ đây nếu cần
+                },
+                onDismiss = {
+                    viewModel.clearSearch()
+                    showSearchOverlay = false
+                },
+                viewModel = viewModel
+            )
         }
     }
 }
@@ -1580,6 +1645,198 @@ fun SimpleCityItem(
     }
 }
 
+// Sidebar Overlay Component
+@Composable
+fun SidebarOverlay(
+    isVisible: Boolean,
+    onDismiss: () -> Unit,
+    onSettingsClick: () -> Unit,
+    onCityManagementClick: () -> Unit,
+    onFilterClick: () -> Unit
+) {
+    // Background overlay với fade animation
+    AnimatedVisibility(
+        visible = isVisible,
+        enter = fadeIn(
+            animationSpec = tween(
+                durationMillis = 400,
+                easing = FastOutSlowInEasing
+            )
+        ),
+        exit = fadeOut(
+            animationSpec = tween(
+                durationMillis = 300,
+                easing = FastOutSlowInEasing
+            )
+        )
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(Color.Black.copy(alpha = 0.5f))
+                .clickable { onDismiss() }
+        ) {
+            // Sidebar content với slide animation
+            AnimatedVisibility(
+                visible = isVisible,
+                enter = slideInHorizontally(
+                    initialOffsetX = { -it },
+                    animationSpec = tween(
+                        durationMillis = 400,
+                        easing = FastOutSlowInEasing
+                    )
+                ) + fadeIn(
+                    animationSpec = tween(
+                        durationMillis = 400,
+                        easing = FastOutSlowInEasing
+                    )
+                ),
+                exit = slideOutHorizontally(
+                    targetOffsetX = { -it },
+                    animationSpec = tween(
+                        durationMillis = 300,
+                        easing = FastOutSlowInEasing
+                    )
+                ) + fadeOut(
+                    animationSpec = tween(
+                        durationMillis = 300,
+                        easing = FastOutSlowInEasing
+                    )
+                )
+            ) {
+                Card(
+                    modifier = Modifier
+                        .width(280.dp)
+                        .fillMaxHeight()
+                        .clickable(enabled = false) { /* Prevent click through */ },
+                    colors = CardDefaults.cardColors(
+                        containerColor = Color.White
+                    ),
+                    shape = RoundedCornerShape(
+                        topEnd = 0.dp,
+                        bottomEnd = 16.dp,
+                        topStart = 0.dp,
+                        bottomStart = 0.dp
+                    ),
+                    elevation = CardDefaults.cardElevation(defaultElevation = 8.dp)
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(16.dp)
+                    ) {
+                        Spacer(modifier = Modifier.height(24.dp))
 
+                        // Quản lý thành phố
+                        SidebarMenuItem(
+                            icon = Icons.Default.LocationCity,
+                            title = "Quản lý thành phố",
+                            subtitle = "Thêm, xóa và sắp xếp thành phố",
+                            onClick = onCityManagementClick
+                        )
+
+                        Spacer(modifier = Modifier.height(12.dp))
+
+                        // Lọc thành phố
+                        SidebarMenuItem(
+                            icon = Icons.Default.FilterList,
+                            title = "Lọc thành phố",
+                            subtitle = "Tìm kiếm theo điều kiện thời tiết",
+                            onClick = onFilterClick
+                        )
+
+                        Spacer(modifier = Modifier.height(12.dp))
+
+                        // Cài đặt
+                        SidebarMenuItem(
+                            icon = Icons.Default.Settings,
+                            title = "Cài đặt",
+                            subtitle = "Đơn vị đo lường và tùy chọn khác",
+                            onClick = onSettingsClick
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+// Sidebar Menu Item Component
+@Composable
+fun SidebarMenuItem(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    title: String,
+    subtitle: String,
+    onClick: () -> Unit
+) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable { onClick() },
+        colors = CardDefaults.cardColors(
+            containerColor = Color(0xFFF8F9FA)
+        ),
+        shape = RoundedCornerShape(12.dp),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            // Icon
+            Card(
+                modifier = Modifier.size(48.dp),
+                colors = CardDefaults.cardColors(
+                    containerColor = Color(0xFF5372dc).copy(alpha = 0.1f)
+                ),
+                shape = RoundedCornerShape(12.dp)
+            ) {
+                Box(
+                    modifier = Modifier.fillMaxSize(),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = icon,
+                        contentDescription = title,
+                        tint = Color(0xFF5372dc),
+                        modifier = Modifier.size(24.dp)
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.width(16.dp))
+
+            // Text content
+            Column(
+                modifier = Modifier.weight(1f)
+            ) {
+                Text(
+                    text = title,
+                    color = Color(0xFF2D3748),
+                    fontSize = 16.sp,
+                    fontWeight = FontWeight.Medium
+                )
+                Spacer(modifier = Modifier.height(2.dp))
+                Text(
+                    text = subtitle,
+                    color = Color(0xFF718096),
+                    fontSize = 12.sp
+                )
+            }
+
+            // Arrow icon
+            Icon(
+                painter = painterResource(id = R.drawable.ic_back),
+                contentDescription = "Mở",
+                tint = Color(0xFF718096),
+                modifier = Modifier
+                    .size(16.dp)
+                    .rotate(180f) // Xoay để trở thành mũi tên phải
+            )
+        }
+    }
+}
 
 

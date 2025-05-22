@@ -21,4 +21,11 @@ interface GeoNamesService {
         @Query("username") username: String,
         @Query("lang") language: String = "vi" // Ngôn ngữ tiếng Việt nếu có
     ): GeoNamesResponse
+    
+    // Thêm endpoint để lấy tất cả các quốc gia
+    @GET("countryInfoJSON")
+    suspend fun getAllCountries(
+        @Query("username") username: String,
+        @Query("lang") language: String = "vi" // Ngôn ngữ tiếng Việt nếu có
+    ): CountryInfoResponse
 } 

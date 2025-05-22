@@ -39,7 +39,8 @@ fun SearchScreen(
     onBackClick: () -> Unit,
     onDismiss: () -> Unit,
     onShowFilteredResults: () -> Unit,
-    viewModel: WeatherViewModel
+    viewModel: WeatherViewModel,
+    temperatureUnit: UnitConverter.TemperatureUnit = UnitConverter.TemperatureUnit.CELSIUS
 ) {
     var cityName by remember { mutableStateOf("") }
     var temperatureRange by remember { mutableStateOf(-20f..50f) }
@@ -58,7 +59,10 @@ fun SearchScreen(
     var countrySearchError by remember { mutableStateOf<String?>(null) }
     var searchCountryJob by remember { mutableStateOf<kotlinx.coroutines.Job?>(null) }
     
-    // Danh sách quốc gia mặc định (đã xóa tùy chọn "Tất cả")
+    // Sử dụng danh sách quốc gia từ API thay vì hardcode
+    val apiCountries = viewModel.availableCountries.map { it.countryName }
+    
+    // Danh sách quốc gia mặc định (fallback khi API chưa load xong)
     val defaultCountries = listOf(
         "Việt Nam", 
         "Hoa Kỳ", 
@@ -82,10 +86,13 @@ fun SearchScreen(
         "Thái Lan"
     )
     
-    // Danh sách mặc định làm dự phòng khi API lỗi
+    // Sử dụng danh sách từ API nếu có, nếu không thì dùng danh sách mặc định
+    val countriesToUse = if (apiCountries.isNotEmpty()) apiCountries else defaultCountries
+    
+    // Danh sách làm dự phòng khi API lỗi
     val localFilteredCountries = if (filterCountryQuery.isBlank()) {
-        // Nếu truy vấn trống, hiển thị tất cả quốc gia mặc định
-        defaultCountries.map { country -> 
+        // Nếu truy vấn trống, hiển thị tất cả quốc gia
+        countriesToUse.map { country -> 
             PlaceSuggestion(
                 formattedName = country,
                 city = null,
@@ -96,7 +103,7 @@ fun SearchScreen(
         }
     } else {
         // Nếu có truy vấn, lọc quốc gia phù hợp với truy vấn
-        defaultCountries.filter { 
+        countriesToUse.filter { 
             it.lowercase().contains(filterCountryQuery.lowercase()) 
         }.map { country ->
             PlaceSuggestion(
@@ -116,8 +123,8 @@ fun SearchScreen(
         val cleanQuery = query.trim()
         Log.d("SearchScreen", "searchCountry gọi với query: '$cleanQuery'")
         
-        // Lọc danh sách local ngay lập tức
-        val filteredLocalCountries = defaultCountries.filter { 
+        // Lọc danh sách local ngay lập tức (sử dụng countriesToUse thay vì defaultCountries)
+        val filteredLocalCountries = countriesToUse.filter { 
             it.lowercase().contains(cleanQuery.lowercase()) 
         }.map { country ->
             PlaceSuggestion(
@@ -170,7 +177,7 @@ fun SearchScreen(
                     // Chỉ lấy các kết quả là quốc gia (fcode="PCLI")
                     if (geoCity.fcode == "PCLI") {
                         PlaceSuggestion(
-                            formattedName = geoCity.name,
+                            formattedName = geoCity.name, // Tên gọn gàng cho quốc gia
                             city = null,
                             country = geoCity.countryName,
                             latitude = geoCity.lat.toDoubleOrNull(),
@@ -400,8 +407,9 @@ fun SearchScreen(
             }
 
             // Bộ lọc nhiệt độ
+            val tempSymbol = if (temperatureUnit == UnitConverter.TemperatureUnit.CELSIUS) "°C" else "°F"
             Text(
-                text = "Nhiệt độ (${temperatureRange.start.toInt()}°C - ${temperatureRange.endInclusive.toInt()}°C)",
+                text = "Nhiệt độ (${temperatureRange.start.toInt()}$tempSymbol - ${temperatureRange.endInclusive.toInt()}$tempSymbol)",
                 fontSize = 16.sp,
                 color = Color(0xFF5372dc),
                 modifier = Modifier.padding(bottom = 8.dp)
@@ -424,7 +432,7 @@ fun SearchScreen(
 
             // Bộ lọc tốc độ gió
             Text(
-                text = "Tốc độ gió (${windSpeedRange.start.toInt()} km/h - ${windSpeedRange.endInclusive.toInt()} km/h)",
+                text = "Tốc độ gió (${windSpeedRange.start.toInt()} - ${windSpeedRange.endInclusive.toInt()} km/h)",
                 fontSize = 16.sp,
                 color = Color(0xFF5372dc),
                 modifier = Modifier.padding(bottom = 8.dp)

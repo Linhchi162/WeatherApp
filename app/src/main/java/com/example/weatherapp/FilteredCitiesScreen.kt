@@ -32,10 +32,20 @@ import kotlinx.coroutines.delay
 fun FilteredCitiesScreen(
     onBackClick: () -> Unit,
     onDismiss: () -> Unit,
-    viewModel: WeatherViewModel
+    viewModel: WeatherViewModel,
+    temperatureUnit: UnitConverter.TemperatureUnit = UnitConverter.TemperatureUnit.CELSIUS,
+    windSpeedUnit: UnitConverter.WindSpeedUnit = UnitConverter.WindSpeedUnit.KMH
 ) {
     var isLoadingData by remember { mutableStateOf(false) }
     var loadingTimeoutReached by remember { mutableStateOf(false) }
+    
+    // DisposableEffect để đảm bảo reset kết quả lọc khi màn hình này bị hủy
+    DisposableEffect(Unit) {
+        onDispose {
+            Log.d("FilteredCitiesScreen", "Màn hình FilteredCitiesScreen bị hủy - reset kết quả lọc")
+            viewModel.resetFilterResults()
+        }
+    }
     
     // Danh sách thành phố để hiển thị (sử dụng filteredCities thay vì citiesList)
     val allFilteredCities = viewModel.filteredCities
@@ -193,8 +203,9 @@ fun FilteredCitiesScreen(
                         fontSize = 14.sp,
                         color = Color(0xFF5372dc)
                     )
+                    val tempSymbol = if (temperatureUnit == UnitConverter.TemperatureUnit.CELSIUS) "°C" else "°F"
                     Text(
-                        text = "Nhiệt độ: ${viewModel.temperatureFilterRange.start.toInt()}°C - ${viewModel.temperatureFilterRange.endInclusive.toInt()}°C",
+                        text = "Nhiệt độ: ${viewModel.temperatureFilterRange.start.toInt()}$tempSymbol - ${viewModel.temperatureFilterRange.endInclusive.toInt()}$tempSymbol",
                         fontSize = 14.sp,
                         color = Color(0xFF5372dc)
                     )
@@ -479,7 +490,7 @@ fun FilteredCitiesScreen(
                                             color = Color(0xFF5372dc).copy(alpha = 0.8f)
                                         )
                                         Text(
-                                            text = "Tốc độ gió: ${currentWindSpeed} km/h",
+                                            text = "Tốc độ gió: ${UnitConverter.convertWindSpeed(currentWindSpeed.toDouble(), windSpeedUnit)}",
                                             fontSize = 12.sp,
                                             color = Color(0xFF5372dc).copy(alpha = 0.8f)
                                         )

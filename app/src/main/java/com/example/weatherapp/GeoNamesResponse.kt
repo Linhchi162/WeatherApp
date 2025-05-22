@@ -16,4 +16,20 @@ data class GeoNameCity(
     val population: Long?,
     val toponymName: String?,
     val adminName1: String?  // Tên tỉnh/bang/vùng
-) 
+)
+
+// Data class cho country info response
+data class CountryInfoResponse(
+    val geonames: List<CountryInfo>?
+)
+
+data class CountryInfo(
+    val countryCode: String,
+    val countryName: String,
+    val continent: String?,
+    val capital: String?,
+    val languages: String?,
+    val currencyCode: String?,
+    val population: String?,
+    val areaInSqKm: String?
+)

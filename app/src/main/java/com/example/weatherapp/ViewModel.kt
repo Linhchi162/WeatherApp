@@ -79,6 +79,9 @@ class WeatherViewModel(
         listOf<City>() // Không khởi tạo sẵn danh sách thành phố
     )
 
+    // Lưu trữ danh sách thành phố gốc trước khi lọc
+    private var originalCities: List<City> = emptyList()
+
     var weatherDataMap: Map<String, WeatherDataState> by mutableStateOf(emptyMap())
         private set
 
@@ -107,6 +110,14 @@ class WeatherViewModel(
     var weatherStateFilter by mutableStateOf("Tất cả")
         private set
     
+    // State cho danh sách quốc gia từ API
+    var availableCountries by mutableStateOf<List<CountryInfo>>(emptyList())
+        private set
+    var isLoadingCountries by mutableStateOf(false)
+        private set
+    var countriesError by mutableStateOf<String?>(null)
+        private set
+    
     // State cho thành phố đã lọc
     var filteredCities by mutableStateOf<List<City>>(emptyList())
         private set
@@ -124,6 +135,9 @@ class WeatherViewModel(
         cities = emptyList() // Danh sách rỗng
         weatherDataMap = emptyMap() // Map rỗng
         currentCity = "" // Không có thành phố hiện tại
+        
+        // Fetch danh sách quốc gia từ API
+        fetchCountriesFromAPI()
     }
 
     // Hàm thêm thành phố với tùy chọn thêm vào đầu danh sách
@@ -140,6 +154,18 @@ class WeatherViewModel(
                 cities + city
             }
             cities = updatedCities
+            
+            // Cập nhật originalCities nếu chưa có (để đảm bảo sync)
+            if (originalCities.isEmpty()) {
+                originalCities = updatedCities.toList()
+            } else {
+                // Thêm thành phố mới vào originalCities nếu đã có
+                originalCities = if (isPrimary) {
+                    listOf(city) + originalCities 
+                } else {
+                    originalCities + city
+                }
+            }
             
             // Cập nhật map (có thể thêm entry rỗng hoặc loading)
             weatherDataMap = weatherDataMap.toMutableMap().apply {
@@ -196,6 +222,11 @@ class WeatherViewModel(
             if (cityToRemove != null) {
                 val newList = currentList - cityToRemove
                 cities = newList // Cập nhật state
+
+                // Cập nhật originalCities nếu có
+                if (originalCities.isNotEmpty()) {
+                    originalCities = originalCities.filter { it.name != cityNameToDelete }
+                }
 
                 // 2. Cập nhật State Weather Map
                 weatherDataMap = weatherDataMap.toMutableMap().apply {
@@ -829,7 +860,7 @@ class WeatherViewModel(
 
         searchJob = viewModelScope.launch {
 
-            delay(100L) // Debounce: Chờ 100ms sau khi người dùng ngừng gõ mới tìm kiếm (tăng tốc)
+            delay(300L) // Debounce: Chờ 300ms sau khi người dùng ngừng gõ mới tìm kiếm
             try {
                 // Chuyển đổi thành một tìm kiếm đơn giản bằng GeoNames
                 val response = withContext(Dispatchers.IO) {
@@ -848,7 +879,7 @@ class WeatherViewModel(
                 // Xử lý kết quả trả về từ GeoNames
                 val suggestions = response.geonames?.map { geoCity ->
                         PlaceSuggestion(
-                        formattedName = "${geoCity.name}, ${geoCity.countryName}",
+                        formattedName = geoCity.name, // Chỉ hiển thị tên thành phố, không kèm quốc gia để gọn gàng
                         city = geoCity.name,
                         country = geoCity.countryName,
                         latitude = geoCity.lat.toDoubleOrNull(),
@@ -863,6 +894,10 @@ class WeatherViewModel(
                     null
 
 
+            } catch (e: CancellationException) {
+                // Ignore cancellation - đây là hành vi bình thường khi debounce
+                Log.d("WeatherViewModel", "Search cancelled - this is normal")
+                throw e // Re-throw để coroutine biết nó đã bị cancel
             } catch (e: Exception) {
                 Log.e("WeatherViewModel", "Lỗi tìm kiếm địa điểm: ${e.message}", e)
                 searchError = "Lỗi khi tìm kiếm: ${e.message}"
@@ -935,14 +970,24 @@ class WeatherViewModel(
         viewModelScope.launch {
             isFiltering = true
             
+            // Lưu danh sách thành phố gốc trước khi lọc
+            if (originalCities.isEmpty()) {
+                originalCities = cities.toList()
+                Log.d("WeatherViewModel", "Lưu originalCities: ${originalCities.size} thành phố")
+            }
+            
             try {
                 Log.d("WeatherViewModel", "Bắt đầu lọc với quốc gia: ${if(selectedFilterCountry.isEmpty()) "<không chọn>" else selectedFilterCountry}")
+                
+                // Tạo danh sách tạm thời để lọc mà không thay đổi cities gốc
+                var citiesToFilter = cities.toList()
                 
                 // Chỉ tìm kiếm thành phố của quốc gia cụ thể khi đã chọn quốc gia
                 if (selectedFilterCountry.isNotEmpty()) {
                     Log.d("WeatherViewModel", "Tìm kiếm các thành phố cho quốc gia: $selectedFilterCountry")
-                    fetchCitiesByCountryWithGeoNames(selectedFilterCountry)
-                    // Tạm dừng lâu hơn (3 giây) để đảm bảo kết quả được cập nhật
+                    val additionalCities = fetchCitiesForFiltering(selectedFilterCountry)
+                    citiesToFilter = (citiesToFilter + additionalCities).distinctBy { it.name }
+                    // Tạm dừng để đảm bảo kết quả được cập nhật
                     delay(3000)
                 } else {
                     Log.d("WeatherViewModel", "Không có quốc gia được chọn, bỏ qua việc tìm kiếm thành phố mới")
@@ -950,29 +995,53 @@ class WeatherViewModel(
                 
                 Log.d("WeatherViewModel", "Danh sách thành phố hiện tại: ${cities.size} thành phố")
                 
-                // Map các biến thể tên quốc gia để hỗ trợ tìm kiếm linh hoạt
-                val countryVariants = mapOf(
-                    "Hoa Kỳ" to listOf("Mỹ", "USA", "United States", "United States of America"),
-                    "Mỹ" to listOf("Hoa Kỳ", "USA", "United States", "United States of America"),
-                    "Hàn Quốc" to listOf("Korea", "South Korea", "Republic of Korea"),
-                    "Nhật Bản" to listOf("Japan"),
-                    "Việt Nam" to listOf("Vietnam"),
-                    "Trung Quốc" to listOf("China"),
-                    "Anh" to listOf("United Kingdom", "England", "Great Britain", "UK"),
-                    "Nga" to listOf("Russia", "Russian Federation"),
-                    "Đức" to listOf("Germany"),
-                    "Pháp" to listOf("France"),
-                    "Ấn Độ" to listOf("India"),
-                    "Canada" to listOf("Canada"),
-                    "Ý" to listOf("Italy"),
-                    "Tây Ban Nha" to listOf("Spain"),
-                    "Brazil" to listOf("Brazil", "Brasil"),
-                    "Mexico" to listOf("Mexico"),
-                    "Indonesia" to listOf("Indonesia"),
-                    "Malaysia" to listOf("Malaysia"),
-                    "Singapore" to listOf("Singapore"),
-                    "Thái Lan" to listOf("Thailand")
-                )
+                // Sử dụng danh sách quốc gia từ API để tạo map biến thể
+                val countryVariants = mutableMapOf<String, List<String>>()
+                
+                // Thêm mapping từ API
+                availableCountries.forEach { country ->
+                    val countryName = country.countryName
+                    val countryCode = country.countryCode
+                    
+                    // Tạo danh sách biến thể cho mỗi quốc gia
+                    val variants = mutableListOf<String>()
+                    
+                    // Thêm các biến thể phổ biến
+                    when (countryCode) {
+                        "VN" -> variants.addAll(listOf("viet nam", "vietnam", "việt nam"))
+                        "US" -> variants.addAll(listOf("mỹ", "my", "hoa kỳ", "hoa ky", "usa", "america", "united states"))
+                        "KR" -> variants.addAll(listOf("hàn quốc", "han quoc", "korea", "south korea"))
+                        "JP" -> variants.addAll(listOf("nhật bản", "nhat ban", "japan"))
+                        "CN" -> variants.addAll(listOf("trung quốc", "trung quoc", "china"))
+                        "GB" -> variants.addAll(listOf("anh", "uk", "united kingdom", "england"))
+                        "FR" -> variants.addAll(listOf("pháp", "phap", "france"))
+                        "DE" -> variants.addAll(listOf("đức", "duc", "germany"))
+                        "RU" -> variants.addAll(listOf("nga", "russia"))
+                        "AU" -> variants.addAll(listOf("úc", "uc", "australia"))
+                        "TH" -> variants.addAll(listOf("thái lan", "thai lan", "thailand"))
+                        "IN" -> variants.addAll(listOf("ấn độ", "an do", "india"))
+                        "IT" -> variants.addAll(listOf("ý", "y", "italy"))
+                        "ES" -> variants.addAll(listOf("tây ban nha", "tay ban nha", "spain"))
+                        "BR" -> variants.addAll(listOf("brazil", "brasil"))
+                        "ID" -> variants.addAll(listOf("indonesia"))
+                        "MY" -> variants.addAll(listOf("malaysia"))
+                        "SG" -> variants.addAll(listOf("singapore"))
+                        "CA" -> variants.addAll(listOf("canada"))
+                        "MX" -> variants.addAll(listOf("mexico"))
+                    }
+                    
+                    // Luôn thêm tên chính thức từ API
+                    variants.add(countryName)
+                    variants.add(countryCode)
+                    
+                    // Thêm vào map
+                    countryVariants[countryName] = variants.distinct()
+                    variants.forEach { variant ->
+                        if (!countryVariants.containsKey(variant)) {
+                            countryVariants[variant] = listOf(countryName) + variants
+                        }
+                    }
+                }
                 
                 // Log thông tin quốc gia đã chọn và biến thể nếu có
                 if (selectedFilterCountry.isNotEmpty()) {
@@ -980,7 +1049,7 @@ class WeatherViewModel(
                 }
                 
                 // Lọc trên main thread để tránh race condition với UI
-                val result = cities.filter { city ->
+                val result = citiesToFilter.filter { city ->
                     // Lọc theo quốc gia (bỏ qua nếu selectedFilterCountry rỗng)
                     val matchesCountry = if (selectedFilterCountry.isEmpty()) {
                         true // Không lọc theo quốc gia nếu không chọn quốc gia
@@ -1075,6 +1144,10 @@ class WeatherViewModel(
                 // Cập nhật state
                 filteredCities = result
                 
+            } catch (e: CancellationException) {
+                // Ignore cancellation - đây là hành vi bình thường
+                Log.d("WeatherViewModel", "Filter operation cancelled - this is normal")
+                throw e
             } catch (e: Exception) {
                 Log.e("WeatherViewModel", "Lỗi khi áp dụng bộ lọc: ${e.message}", e)
                 // Nếu lỗi, trả về tất cả các thành phố
@@ -1094,22 +1167,22 @@ class WeatherViewModel(
                 
                 // Map tên quốc gia tiếng Việt sang mã quốc gia ISO 2 chữ cái
                 val countryCode = when (country.lowercase()) {
-                    "việt nam" -> "VN"
-                    "hàn quốc" -> "KR"
-                    "nhật bản" -> "JP"
-                    "trung quốc" -> "CN"
-                    "hoa kỳ", "mỹ" -> "US"
-                    "anh" -> "GB"
-                    "pháp" -> "FR"
-                    "đức" -> "DE"
-                    "nga" -> "RU"
-                    "úc" -> "AU"
-                    "thái lan" -> "TH"
-                    "ấn độ" -> "IN"
+                    "việt nam", "viet nam", "vietnam" -> "VN"
+                    "hàn quốc", "han quoc", "korea", "south korea" -> "KR"
+                    "nhật bản", "nhat ban", "japan" -> "JP"
+                    "trung quốc", "trung quoc", "china" -> "CN"
+                    "hoa kỳ", "hoa ky", "mỹ", "my", "usa", "united states", "america" -> "US"
+                    "anh", "united kingdom", "uk", "england" -> "GB"
+                    "pháp", "phap", "france" -> "FR"
+                    "đức", "duc", "germany" -> "DE"
+                    "nga", "russia" -> "RU"
+                    "úc", "uc", "australia" -> "AU"
+                    "thái lan", "thai lan", "thailand" -> "TH"
+                    "ấn độ", "an do", "india" -> "IN"
                     "canada" -> "CA"
-                    "ý" -> "IT"
-                    "tây ban nha" -> "ES"
-                    "brazil" -> "BR"
+                    "ý", "y", "italy" -> "IT"
+                    "tây ban nha", "tay ban nha", "spain" -> "ES"
+                    "brazil", "brasil" -> "BR"
                     "mexico" -> "MX"
                     "indonesia" -> "ID"
                     "malaysia" -> "MY"
@@ -1292,6 +1365,9 @@ class WeatherViewModel(
                             } else {
                         Log.d("WeatherViewModel", "Không tìm thấy thành phố mới từ GeoNames cho quốc gia: $country")
                     }
+                } catch (e: CancellationException) {
+                    Log.d("WeatherViewModel", "GeoNames fetch cancelled - this is normal")
+                    throw e
                 } catch (e: Exception) {
                     Log.e("WeatherViewModel", "Lỗi khi lấy thành phố từ GeoNames API: ${e.message}", e)
                     Log.e(DEBUG_TAG, "Lỗi trong quá trình xử lý GeoNames API: ${e.message}", e)
@@ -1352,6 +1428,9 @@ class WeatherViewModel(
                     }
                 }
                 
+            } catch (e: CancellationException) {
+                Log.d("WeatherViewModel", "Fetch cities operation cancelled - this is normal")
+                throw e
             } catch (e: Exception) {
                 Log.e("WeatherViewModel", "Lỗi khi lấy thành phố: ${e.message}", e)
                 Log.e(DEBUG_TAG, "Lỗi trong quá trình xử lý API: ${e.message}", e)
@@ -1388,4 +1467,185 @@ class WeatherViewModel(
         }
     }
 
+    // Hàm mới để reset kết quả lọc khi quay về màn hình chính
+    fun resetFilterResults() {
+        Log.d("WeatherViewModel", "Reset kết quả lọc: từ filteredCities.size=${filteredCities.size} về originalCities.size=${originalCities.size}")
+        
+        // Reset về danh sách thành phố ban đầu nếu có
+        if (originalCities.isNotEmpty()) {
+            filteredCities = originalCities
+            originalCities = emptyList() // Clear originalCities sau khi reset
+        } else {
+            filteredCities = cities // Fallback nếu originalCities rỗng
+        }
+        
+        isFiltering = false      // Đảm bảo trạng thái lọc cũng được reset
+        
+        // Reset các bộ lọc về giá trị mặc định
+        selectedFilterCountry = ""
+        temperatureFilterRange = -20f..50f
+        windSpeedFilterRange = 0f..100f
+        humidityFilterRange = 0f..100f
+        weatherStateFilter = "Tất cả"
+    }
+
+    // Hàm mới để lấy thành phố cho việc lọc mà không thay đổi cities gốc
+    private suspend fun fetchCitiesForFiltering(country: String): List<City> {
+        return withContext(Dispatchers.IO) {
+            try {
+                Log.d(DEBUG_TAG, "Lấy thành phố cho lọc: $country")
+                
+                // Map tên quốc gia
+                val countryCode = when (country.lowercase()) {
+                    "việt nam", "viet nam", "vietnam" -> "VN"
+                    "hàn quốc", "han quoc", "korea", "south korea" -> "KR"
+                    "nhật bản", "nhat ban", "japan" -> "JP"
+                    "trung quốc", "trung quoc", "china" -> "CN"
+                    "hoa kỳ", "hoa ky", "mỹ", "my", "usa", "united states", "america" -> "US"
+                    "anh", "united kingdom", "uk", "england" -> "GB"
+                    "pháp", "phap", "france" -> "FR"
+                    "đức", "duc", "germany" -> "DE"
+                    "nga", "russia" -> "RU"
+                    "úc", "uc", "australia" -> "AU"
+                    "thái lan", "thai lan", "thailand" -> "TH"
+                    "ấn độ", "an do", "india" -> "IN"
+                    "canada" -> "CA"
+                    "ý", "y", "italy" -> "IT"
+                    "tây ban nha", "tay ban nha", "spain" -> "ES"
+                    "brazil", "brasil" -> "BR"
+                    "mexico" -> "MX"
+                    "indonesia" -> "ID"
+                    "malaysia" -> "MY"
+                    "singapore" -> "SG"
+                    else -> country
+                }
+                
+                // Thêm các thành phố thủ công
+                val manualCities = when (countryCode) {
+                    "VN" -> listOf(
+                        City("Hà Nội", 21.0285, 105.8542, "Việt Nam"),
+                        City("TP. Hồ Chí Minh", 10.7769, 106.7009, "Việt Nam"),
+                        City("Đà Nẵng", 16.0544, 108.2022, "Việt Nam")
+                    )
+                    "KR" -> listOf(
+                        City("Seoul", 37.5665, 126.9780, "Hàn Quốc"),
+                        City("Busan", 35.1796, 129.0756, "Hàn Quốc"),
+                        City("Incheon", 37.4563, 126.7052, "Hàn Quốc")
+                    )
+                    "JP" -> listOf(
+                        City("Tokyo", 35.6762, 139.6503, "Nhật Bản"),
+                        City("Osaka", 34.6937, 135.5023, "Nhật Bản"),
+                        City("Kyoto", 35.0116, 135.7681, "Nhật Bản")
+                    )
+                    // Các quốc gia khác tương tự...
+                    else -> emptyList()
+                }
+                
+                val result = mutableListOf<City>()
+                
+                // Thêm thành phố thủ công
+                result.addAll(manualCities)
+                
+                // Gọi GeoNames API
+                try {
+                    val response = geoNamesService.getCitiesByCountry(
+                        countryCode = countryCode,
+                        maxRows = 50,
+                        username = RetrofitInstance.GEONAMES_USERNAME
+                    )
+                    
+                    val apiCities = response.geonames?.map { geoCity ->
+                        City(
+                            name = geoCity.name,
+                            latitude = geoCity.lat.toDouble(),
+                            longitude = geoCity.lng.toDouble(),
+                            country = geoCity.countryName
+                        )
+                    } ?: emptyList()
+                    
+                    result.addAll(apiCities)
+                } catch (e: CancellationException) {
+                    Log.d("WeatherViewModel", "GeoNames API call cancelled - this is normal")
+                    throw e
+                } catch (e: Exception) {
+                    Log.e("WeatherViewModel", "Lỗi khi gọi GeoNames API: ${e.message}")
+                }
+                
+                Log.d(DEBUG_TAG, "Lấy được ${result.size} thành phố cho lọc")
+                result.distinctBy { it.name }
+                
+            } catch (e: CancellationException) {
+                Log.d("WeatherViewModel", "FetchCitiesForFiltering cancelled - this is normal")
+                throw e
+            } catch (e: Exception) {
+                Log.e("WeatherViewModel", "Lỗi trong fetchCitiesForFiltering: ${e.message}")
+                emptyList()
+            }
+        }
+    }
+    
+    // Hàm mới để lấy danh sách quốc gia từ API
+    fun fetchCountriesFromAPI() {
+        viewModelScope.launch {
+            isLoadingCountries = true
+            countriesError = null
+            
+            try {
+                Log.d("WeatherViewModel", "Đang lấy danh sách quốc gia từ GeoNames API...")
+                
+                val response = withContext(Dispatchers.IO) {
+                    geoNamesService.getAllCountries(
+                        username = RetrofitInstance.GEONAMES_USERNAME
+                    )
+                }
+                
+                val countries = response.geonames ?: emptyList()
+                Log.d("WeatherViewModel", "Lấy được ${countries.size} quốc gia từ API")
+                
+                // Sắp xếp theo tên quốc gia
+                availableCountries = countries.sortedBy { it.countryName }
+                
+                Log.d("WeatherViewModel", "Một số quốc gia: ${countries.take(5).map { "${it.countryName} (${it.countryCode})" }}")
+                
+            } catch (e: CancellationException) {
+                Log.d("WeatherViewModel", "FetchCountriesFromAPI cancelled - this is normal")
+                throw e
+            } catch (e: Exception) {
+                Log.e("WeatherViewModel", "Lỗi khi lấy danh sách quốc gia: ${e.message}", e)
+                countriesError = "Lỗi khi tải danh sách quốc gia: ${e.message}"
+                
+                // Fallback: sử dụng danh sách quốc gia mặc định
+                availableCountries = getDefaultCountries()
+                
+            } finally {
+                isLoadingCountries = false
+            }
+        }
+    }
+    
+    // Hàm tạo danh sách quốc gia mặc định (fallback)
+    private fun getDefaultCountries(): List<CountryInfo> {
+        return listOf(
+            CountryInfo("VN", "Việt Nam", "AS", "Hanoi", "vi", "VND", "", ""),
+            CountryInfo("US", "Hoa Kỳ", "NA", "Washington", "en", "USD", "", ""),
+            CountryInfo("KR", "Hàn Quốc", "AS", "Seoul", "ko", "KRW", "", ""),
+            CountryInfo("JP", "Nhật Bản", "AS", "Tokyo", "ja", "JPY", "", ""),
+            CountryInfo("CN", "Trung Quốc", "AS", "Beijing", "zh", "CNY", "", ""),
+            CountryInfo("GB", "Anh", "EU", "London", "en", "GBP", "", ""),
+            CountryInfo("FR", "Pháp", "EU", "Paris", "fr", "EUR", "", ""),
+            CountryInfo("DE", "Đức", "EU", "Berlin", "de", "EUR", "", ""),
+            CountryInfo("RU", "Nga", "EU", "Moscow", "ru", "RUB", "", ""),
+            CountryInfo("AU", "Úc", "OC", "Canberra", "en", "AUD", "", ""),
+            CountryInfo("TH", "Thái Lan", "AS", "Bangkok", "th", "THB", "", ""),
+            CountryInfo("IN", "Ấn Độ", "AS", "New Delhi", "hi", "INR", "", ""),
+            CountryInfo("CA", "Canada", "NA", "Ottawa", "en", "CAD", "", ""),
+            CountryInfo("IT", "Ý", "EU", "Rome", "it", "EUR", "", ""),
+            CountryInfo("ES", "Tây Ban Nha", "EU", "Madrid", "es", "EUR", "", ""),
+            CountryInfo("BR", "Brazil", "SA", "Brasília", "pt", "BRL", "", ""),
+            CountryInfo("MX", "Mexico", "NA", "Mexico City", "es", "MXN", "", ""),
+            CountryInfo("ID", "Indonesia", "AS", "Jakarta", "id", "IDR", "", ""),
+            CountryInfo("MY", "Malaysia", "AS", "Kuala Lumpur", "ms", "MYR", "", ""),
+            CountryInfo("SG", "Singapore", "AS", "Singapore", "en", "SGD", "", "")
+        )
+    }
 }

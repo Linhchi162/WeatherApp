@@ -665,35 +665,39 @@ class MainActivity : ComponentActivity() {
                         val county = properties.optString("county", "")
                         val state = properties.optString("state", "")
                         
-                        // Build a detailed name with priority to smaller areas
+                        // Build a detailed name with priority to smaller areas (chỉ sử dụng tên gọn gàng)
                         if (district.isNotEmpty()) {
                             detailedArea = district
-                            // If city exists, add it with district
-                            if (city.isNotEmpty() && city != district) {
-                                locationName = "$district, $city"
-                            } else {
-                                locationName = district
+                            // Chỉ sử dụng district thôi, không ghép với city để tên gọn gàng hơn
+                            locationName = district.split(" ").joinToString(" ") { 
+                                it.replaceFirstChar { char -> char.uppercaseChar() } 
                             }
                         } else if (suburb.isNotEmpty()) {
                             detailedArea = suburb
-                            // If city exists, add it with suburb
-                            if (city.isNotEmpty() && city != suburb) {
-                                locationName = "$suburb, $city"
-                            } else {
-                                locationName = suburb
+                            // Chỉ sử dụng suburb thôi, không ghép với city
+                            locationName = suburb.split(" ").joinToString(" ") { 
+                                it.replaceFirstChar { char -> char.uppercaseChar() } 
                             }
                         } else if (municipality.isNotEmpty()) {
                             detailedArea = municipality
-                            locationName = municipality
+                            locationName = municipality.split(" ").joinToString(" ") { 
+                                it.replaceFirstChar { char -> char.uppercaseChar() } 
+                            }
                         } else if (city.isNotEmpty()) {
                             detailedArea = city
-                            locationName = city
+                            locationName = city.split(" ").joinToString(" ") { 
+                                it.replaceFirstChar { char -> char.uppercaseChar() } 
+                            }
                         } else if (county.isNotEmpty()) {
                             detailedArea = county
-                            locationName = county
+                            locationName = county.split(" ").joinToString(" ") { 
+                                it.replaceFirstChar { char -> char.uppercaseChar() } 
+                            }
                         } else if (state.isNotEmpty()) {
                             detailedArea = state
-                            locationName = state
+                            locationName = state.split(" ").joinToString(" ") { 
+                                it.replaceFirstChar { char -> char.uppercaseChar() } 
+                            }
                         }
                         
                         Log.d("WeatherApp", "Chi tiết địa điểm: suburb=$district, quarter=$suburb, county=$municipality, city=$city")
