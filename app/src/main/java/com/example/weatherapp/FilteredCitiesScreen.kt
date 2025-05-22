@@ -52,8 +52,23 @@ fun FilteredCitiesScreen(
                     val weatherCode = data.weatherCodeList.getOrNull(index) ?: 0
                     val description = getFilteredWeatherDescription(weatherCode)
                     val timeString = data.timeList.getOrNull(index) ?: ""
+                    
+                    // Kiểm tra trạng thái thời tiết theo mã trước
+                    val codeMatches = doesWeatherCodeMatchFilter(weatherCode, viewModel.weatherStateFilter)
+                    
+                    // Nếu không khớp theo mã, thử khớp theo mô tả
+                    val descMatches = if (!codeMatches) 
+                        doesWeatherMatchFilter(description, viewModel.weatherStateFilter, timeString)
+                    else true
+                    
+                    val matches = codeMatches || descMatches
+                    
+                    // Thêm log chi tiết để debug
+                    Log.d("FilteredCitiesScreen", "Thành phố ${city.name} với mô tả '$description' (code=$weatherCode): " +
+                          "codeMatches=$codeMatches, descMatches=$descMatches, finalMatch=$matches")
+                    
                     // Chỉ giữ lại những thành phố khớp với bộ lọc thời tiết
-                    doesWeatherMatchFilter(description, viewModel.weatherStateFilter, timeString)
+                    matches
                 } else {
                     false // Bỏ qua các thành phố đang tải dữ liệu
                 }
@@ -632,6 +647,23 @@ fun doesWeatherMatchFilter(weatherDescription: String, weatherFilter: String, ti
     // Log chi tiết cho debug
     Log.d("FilteredCitiesScreen", "Kiểm tra lọc thời tiết: '$weatherDescription' với bộ lọc '$weatherFilter'")
     
+    // Trước tiên kiểm tra khớp trực tiếp với từng trạng thái
+    val directMatch = when (weatherFilter) {
+        "Nắng" -> weatherDescription == "Bầu trời quang đãng" || 
+                  weatherDescription == "Chủ yếu quang đãng"
+        "Nhiều mây" -> weatherDescription == "Có mây rải rác" || 
+                      weatherDescription == "Nhiều mây"
+        "Mưa" -> weatherDescription.contains("Mưa")
+        "Sương mù" -> weatherDescription.contains("Sương mù")
+        "Tuyết" -> weatherDescription.contains("Tuyết")
+        else -> false
+    }
+    
+    if (directMatch) {
+        Log.d("FilteredCitiesScreen", "Khớp trực tiếp: $weatherDescription -> $weatherFilter")
+        return true
+    }
+    
     // Kiểm tra thời gian trong ngày cho thời tiết "Nắng"
     if (weatherFilter == "Nắng" && timeString.isNotEmpty()) {
         try {
@@ -651,8 +683,8 @@ fun doesWeatherMatchFilter(weatherDescription: String, weatherFilter: String, ti
     
     // Danh sách từ khóa cho mỗi loại thời tiết
     val keywordMap = mapOf(
-        "Nắng" to listOf("nắng", "quang", "nắng nhẹ", "clear", "sunny", "fair"),
-        "Mây" to listOf("mây", "nhiều mây", "rải rác", "cloudy", "clouds", "overcast"),
+        "Nắng" to listOf("nắng", "quang đãng", "quang", "nắng nhẹ", "clear", "sunny", "fair"),
+        "Nhiều mây" to listOf("mây", "nhiều mây", "rải rác", "cloudy", "clouds", "overcast", "có mây", "chủ yếu quang đãng"),
         "Mưa" to listOf("mưa", "mưa phùn", "mưa rào", "mưa nhỏ", "mưa vừa", "mưa to", "rain", "rainy", "showers", "drizzle"),
         "Tuyết" to listOf("tuyết", "hạt tuyết", "snow", "snowy", "snowfall"),
         "Dông" to listOf("dông", "sấm", "sét", "thunderstorm", "thunder", "lightning"),
@@ -665,6 +697,23 @@ fun doesWeatherMatchFilter(weatherDescription: String, weatherFilter: String, ti
     val keywords = keywordMap[weatherFilter] ?: return false
     val result = keywords.any { keyword -> lowerDesc.contains(keyword.lowercase()) }
     
-    Log.d("FilteredCitiesScreen", "Kết quả lọc thời tiết '$weatherDescription' với '$weatherFilter': $result")
+    Log.d("FilteredCitiesScreen", "Kết quả lọc thời tiết '$weatherDescription' với '$weatherFilter': $result (lowerDesc='$lowerDesc')")
+    return result
+}
+
+// Hàm kiểm tra trạng thái thời tiết dựa trên mã
+fun doesWeatherCodeMatchFilter(weatherCode: Int, weatherFilter: String): Boolean {
+    if (weatherFilter == "Tất cả") return true
+    
+    val result = when (weatherFilter) {
+        "Nắng" -> weatherCode == 0 || weatherCode == 1
+        "Nhiều mây" -> weatherCode == 2 || weatherCode == 3
+        "Mưa" -> weatherCode in listOf(51, 53, 55, 56, 57, 61, 63, 65, 66, 67, 80, 81, 82)
+        "Sương mù" -> weatherCode == 45 || weatherCode == 48
+        "Tuyết" -> weatherCode in listOf(71, 73, 75, 77, 85, 86)
+        else -> false
+    }
+    
+    Log.d("FilteredCitiesScreen", "Kiểm tra lọc mã thời tiết: $weatherCode với bộ lọc '$weatherFilter': $result")
     return result
 } 

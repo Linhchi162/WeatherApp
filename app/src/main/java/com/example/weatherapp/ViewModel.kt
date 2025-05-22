@@ -940,12 +940,15 @@ class WeatherViewModel(
                 
                 // Chỉ tìm kiếm thành phố của quốc gia cụ thể khi đã chọn quốc gia
                 if (selectedFilterCountry.isNotEmpty()) {
+                    Log.d("WeatherViewModel", "Tìm kiếm các thành phố cho quốc gia: $selectedFilterCountry")
                     fetchCitiesByCountryWithGeoNames(selectedFilterCountry)
                     // Tạm dừng lâu hơn (3 giây) để đảm bảo kết quả được cập nhật
                     delay(3000)
+                } else {
+                    Log.d("WeatherViewModel", "Không có quốc gia được chọn, bỏ qua việc tìm kiếm thành phố mới")
                 }
                 
-                Log.d("WeatherViewModel", "Danh sách thành phố: ${cities.map { "${it.name} (${it.country})" }}")
+                Log.d("WeatherViewModel", "Danh sách thành phố hiện tại: ${cities.size} thành phố")
                 
                 // Map các biến thể tên quốc gia để hỗ trợ tìm kiếm linh hoạt
                 val countryVariants = mapOf(
@@ -958,12 +961,22 @@ class WeatherViewModel(
                     "Anh" to listOf("United Kingdom", "England", "Great Britain", "UK"),
                     "Nga" to listOf("Russia", "Russian Federation"),
                     "Đức" to listOf("Germany"),
-                    "Pháp" to listOf("France")
+                    "Pháp" to listOf("France"),
+                    "Ấn Độ" to listOf("India"),
+                    "Canada" to listOf("Canada"),
+                    "Ý" to listOf("Italy"),
+                    "Tây Ban Nha" to listOf("Spain"),
+                    "Brazil" to listOf("Brazil", "Brasil"),
+                    "Mexico" to listOf("Mexico"),
+                    "Indonesia" to listOf("Indonesia"),
+                    "Malaysia" to listOf("Malaysia"),
+                    "Singapore" to listOf("Singapore"),
+                    "Thái Lan" to listOf("Thailand")
                 )
                 
                 // Log thông tin quốc gia đã chọn và biến thể nếu có
                 if (selectedFilterCountry.isNotEmpty()) {
-                    Log.d("WeatherViewModel", "Biến thể của quốc gia: ${countryVariants[selectedFilterCountry] ?: "không có biến thể"}")
+                    Log.d("WeatherViewModel", "Biến thể của quốc gia ${selectedFilterCountry}: ${countryVariants[selectedFilterCountry] ?: "không có biến thể"}")
                 }
                 
                 // Lọc trên main thread để tránh race condition với UI
@@ -1021,7 +1034,7 @@ class WeatherViewModel(
                         currentWeatherCode == null -> "Không xác định"
                         currentWeatherCode == 0 || currentWeatherCode == 1 -> "Nắng"
                         currentWeatherCode in 51..86 -> "Mưa"
-                        currentWeatherCode == 2 || currentWeatherCode == 3 -> "Mây"
+                        currentWeatherCode == 2 || currentWeatherCode == 3 -> "Nhiều mây"
                         currentWeatherCode == 45 || currentWeatherCode == 48 -> "Sương mù"
                         currentWeatherCode in 71..86 -> "Tuyết"
                         else -> "Không xác định"
@@ -1057,7 +1070,7 @@ class WeatherViewModel(
                     matchesCountry && matchesTemp && matchesWind && matchesHumidity && matchesWeatherState
                 }
                 
-                Log.d("WeatherViewModel", "Kết quả lọc: ${result.size} thành phố - ${result.map { it.name }}")
+                Log.d("WeatherViewModel", "Kết quả lọc cuối cùng: ${result.size} thành phố - ${result.map { it.name }}")
                 
                 // Cập nhật state
                 filteredCities = result
@@ -1092,6 +1105,15 @@ class WeatherViewModel(
                     "nga" -> "RU"
                     "úc" -> "AU"
                     "thái lan" -> "TH"
+                    "ấn độ" -> "IN"
+                    "canada" -> "CA"
+                    "ý" -> "IT"
+                    "tây ban nha" -> "ES"
+                    "brazil" -> "BR"
+                    "mexico" -> "MX"
+                    "indonesia" -> "ID"
+                    "malaysia" -> "MY"
+                    "singapore" -> "SG"
                     else -> country // Nếu không tìm thấy, giữ nguyên tên quốc gia
                 }
                 
@@ -1151,6 +1173,49 @@ class WeatherViewModel(
                         City("Bangkok", 13.7563, 100.5018, "Thái Lan"),
                         City("Chiang Mai", 18.7883, 98.9853, "Thái Lan"),
                         City("Phuket", 7.9519, 98.3381, "Thái Lan")
+                    )
+                    "IN" -> listOf(
+                        City("New Delhi", 28.6139, 77.2090, "Ấn Độ"),
+                        City("Mumbai", 19.0760, 72.8777, "Ấn Độ"),
+                        City("Bangalore", 12.9716, 77.5946, "Ấn Độ")
+                    )
+                    "CA" -> listOf(
+                        City("Toronto", 43.6532, -79.3832, "Canada"),
+                        City("Vancouver", 49.2827, -123.1207, "Canada"),
+                        City("Montreal", 45.5017, -73.5673, "Canada")
+                    )
+                    "IT" -> listOf(
+                        City("Rome", 41.9028, 12.4964, "Ý"),
+                        City("Milan", 45.4642, 9.1900, "Ý"),
+                        City("Venice", 45.4408, 12.3155, "Ý")
+                    )
+                    "ES" -> listOf(
+                        City("Madrid", 40.4168, -3.7038, "Tây Ban Nha"),
+                        City("Barcelona", 41.3851, 2.1734, "Tây Ban Nha"),
+                        City("Valencia", 39.4699, -0.3763, "Tây Ban Nha")
+                    )
+                    "BR" -> listOf(
+                        City("Rio de Janeiro", -22.9068, -43.1729, "Brazil"),
+                        City("São Paulo", -23.5505, -46.6333, "Brazil"),
+                        City("Brasília", -15.7801, -47.9292, "Brazil")
+                    )
+                    "MX" -> listOf(
+                        City("Mexico City", 19.4326, -99.1332, "Mexico"),
+                        City("Cancún", 21.1619, -86.8515, "Mexico"),
+                        City("Guadalajara", 20.6597, -103.3496, "Mexico")
+                    )
+                    "ID" -> listOf(
+                        City("Jakarta", -6.2088, 106.8456, "Indonesia"),
+                        City("Bali", -8.3405, 115.0920, "Indonesia"),
+                        City("Surabaya", -7.2575, 112.7521, "Indonesia")
+                    )
+                    "MY" -> listOf(
+                        City("Kuala Lumpur", 3.1390, 101.6869, "Malaysia"),
+                        City("Penang", 5.4141, 100.3292, "Malaysia"),
+                        City("Johor Bahru", 1.4927, 103.7414, "Malaysia")
+                    )
+                    "SG" -> listOf(
+                        City("Singapore", 1.3521, 103.8198, "Singapore")
                     )
                     else -> emptyList()
                 }

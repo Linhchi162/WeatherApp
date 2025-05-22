@@ -116,18 +116,36 @@ fun SearchScreen(
         val cleanQuery = query.trim()
         Log.d("SearchScreen", "searchCountry gọi với query: '$cleanQuery'")
         
-        // Hiển thị kết quả tìm kiếm local ngay lập tức, bất kể độ dài
-        countrySuggestions = localFilteredCountries
+        // Lọc danh sách local ngay lập tức
+        val filteredLocalCountries = defaultCountries.filter { 
+            it.lowercase().contains(cleanQuery.lowercase()) 
+        }.map { country ->
+            PlaceSuggestion(
+                formattedName = country,
+                city = null,
+                country = country,
+                latitude = null,
+                longitude = null
+            )
+        }
+        
+        // Hiển thị kết quả tìm kiếm local ngay lập tức
+        countrySuggestions = filteredLocalCountries
+        
+        // Cập nhật thông báo lỗi nếu không tìm thấy kết quả local
+        if (filteredLocalCountries.isEmpty() && cleanQuery.isNotEmpty()) {
+            countrySearchError = "Không tìm thấy quốc gia phù hợp"
+        } else {
+            countrySearchError = null
+        }
         
         // Chỉ gọi API nếu query đủ dài
         if (cleanQuery.length < 2) {
             isSearchingCountry = false
-            countrySearchError = null
             return
         }
         
         isSearchingCountry = true
-        countrySearchError = null
         
         // Hủy job tìm kiếm trước đó nếu đang chạy
         searchCountryJob?.cancel()
@@ -143,7 +161,7 @@ fun SearchScreen(
                         maxRows = 10,
                         orderBy = "relevance", // Sắp xếp theo độ liên quan
                         username = RetrofitInstance.GEONAMES_USERNAME,
-                        nameStartsWith = cleanQuery
+                        nameStartsWith = cleanQuery // Có thể không tìm được tên Tiếng Việt như "Ấn Độ"
                     )
                 }
                 
@@ -161,8 +179,8 @@ fun SearchScreen(
                     } else null
                 } ?: emptyList()
                 
-                // Kết hợp kết quả từ API với danh sách local
-                val combinedResults = (apiSuggestions + localFilteredCountries)
+                // Kết hợp kết quả từ API với danh sách local đã lọc
+                val combinedResults = (apiSuggestions + filteredLocalCountries)
                     .distinctBy { it.formattedName } // Loại bỏ trùng lặp
                 
                 // Cập nhật state local
@@ -174,10 +192,9 @@ fun SearchScreen(
             } catch (e: Exception) {
                 Log.e("SearchScreen", "Lỗi tìm kiếm quốc gia: ${e.message}", e)
                 // Vẫn giữ lại kết quả local nếu API lỗi
-                countrySuggestions = localFilteredCountries
-                countrySearchError = if (localFilteredCountries.isEmpty()) {
-                    "Lỗi khi tìm kiếm API: ${e.message}"
-                } else null
+                if (filteredLocalCountries.isEmpty() && query.isNotEmpty()) {
+                    countrySearchError = "Không tìm thấy quốc gia phù hợp"
+                }
             } finally {
                 isSearchingCountry = false
             }
