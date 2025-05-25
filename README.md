@@ -12,10 +12,10 @@ WeatherApp là ứng dụng thời tiết hiện đại dành cho Android, cung 
 - **Hỗ trợ tiếng Việt và quốc tế.**
 
 ## 🛠️ Công nghệ sử dụng
-- **Kotlin + Jetpack Compose:** Xây dựng UI hiện đại, mượt mà.
-- **ViewModel, State, Coroutine:** Quản lý trạng thái, bất đồng bộ hiệu quả.
+- **Kotlin + Jetpack Compose:** Xây dựng UI hiện đại.
+- **ViewModel, State, Coroutine:** Quản lý trạng thái, bất đồng bộ.
 - **Retrofit:** Kết nối API thời tiết (OpenMeteo, OpenWeatherMap, GeoNames).
 - **Google Maps SDK:** Hiển thị bản đồ radar.
 - **Material 3:** Giao diện đẹp, hỗ trợ dark mode.
 
-[![Demo Video ( Chưa hoàn thiện )](https://img.youtube.com/vi/<video-id>/0.jpg)]([https://youtu.be/<video-id>](https://www.youtube.com/shorts/cFMx2yiosJY))
+[![Demo Video ( Chưa hoàn thiện )](https://img.youtube.com/vi/<video-id>/0.jpg)](https://www.youtube.com/shorts/cFMx2yiosJY)
