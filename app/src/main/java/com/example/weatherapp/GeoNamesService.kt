@@ -12,7 +12,9 @@ interface GeoNamesService {
         @Query("orderby") orderBy: String = "population", // Sắp xếp theo dân số
         @Query("username") username: String,
         @Query("lang") language: String = "vi", // Ngôn ngữ tiếng Việt nếu có
-        @Query("name_startsWith") nameStartsWith: String = "" // Thêm tham số tìm kiếm theo prefix
+        @Query("name_startsWith") nameStartsWith: String = "", // Thêm tham số tìm kiếm theo prefix
+        @Query("adminCode1") adminCode1: String = "", // Mã tỉnh/thành phố
+        @Query("fcode") fcode: String = "PPLA" // Chỉ lấy thành phố (PPLA = seat of a first-order administrative division)
     ): GeoNamesResponse
     
     @GET("countryInfoJSON")

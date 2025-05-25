@@ -58,34 +58,54 @@ fun FilteredCitiesScreen(
     // Lọc các thành phố theo trạng thái thời tiết
     val displayCities = remember(allFilteredCities, viewModel.weatherDataMap, viewModel.weatherStateFilter) {
         if (viewModel.weatherStateFilter == "Tất cả") {
-            allFilteredCities
+            // Lọc bỏ các quận/huyện/phường/xã
+            allFilteredCities.filter { city ->
+                val name = city.name.lowercase()
+                !name.contains("quận") && 
+                !name.contains("huyện") && 
+                !name.contains("phường") && 
+                !name.contains("xã") &&
+                !name.contains("district") &&
+                !name.contains("ward")
+            }
         } else {
             allFilteredCities.filter { city ->
-                val data = viewModel.weatherDataMap[city.name]
-                if (data != null && data.timeList.isNotEmpty()) {
-                    val index = viewModel.getCurrentIndex(city.name)
-                    val weatherCode = data.weatherCodeList.getOrNull(index) ?: 0
-                    val description = getFilteredWeatherDescription(weatherCode)
-                    val timeString = data.timeList.getOrNull(index) ?: ""
-                    
-                    // Kiểm tra trạng thái thời tiết theo mã trước
-                    val codeMatches = doesWeatherCodeMatchFilter(weatherCode, viewModel.weatherStateFilter)
-                    
-                    // Nếu không khớp theo mã, thử khớp theo mô tả
-                    val descMatches = if (!codeMatches) 
-                        doesWeatherMatchFilter(description, viewModel.weatherStateFilter, timeString)
-                    else true
-                    
-                    val matches = codeMatches || descMatches
-                    
-                    // Thêm log chi tiết để debug
-                    Log.d("FilteredCitiesScreen", "Thành phố ${city.name} với mô tả '$description' (code=$weatherCode): " +
-                          "codeMatches=$codeMatches, descMatches=$descMatches, finalMatch=$matches")
-                    
-                    // Chỉ giữ lại những thành phố khớp với bộ lọc thời tiết
-                    matches
+                // Lọc bỏ các quận/huyện/phường/xã
+                val name = city.name.lowercase()
+                if (name.contains("quận") || 
+                    name.contains("huyện") || 
+                    name.contains("phường") || 
+                    name.contains("xã") ||
+                    name.contains("district") ||
+                    name.contains("ward")) {
+                    false
                 } else {
-                    false // Bỏ qua các thành phố đang tải dữ liệu
+                    val data = viewModel.weatherDataMap[city.name]
+                    if (data != null && data.timeList.isNotEmpty()) {
+                        val index = viewModel.getCurrentIndex(city.name)
+                        val weatherCode = data.weatherCodeList.getOrNull(index) ?: 0
+                        val description = getFilteredWeatherDescription(weatherCode)
+                        val timeString = data.timeList.getOrNull(index) ?: ""
+                        
+                        // Kiểm tra trạng thái thời tiết theo mã trước
+                        val codeMatches = doesWeatherCodeMatchFilter(weatherCode, viewModel.weatherStateFilter)
+                        
+                        // Nếu không khớp theo mã, thử khớp theo mô tả
+                        val descMatches = if (!codeMatches) 
+                            doesWeatherMatchFilter(description, viewModel.weatherStateFilter, timeString)
+                        else true
+                        
+                        val matches = codeMatches || descMatches
+                        
+                        // Thêm log chi tiết để debug
+                        Log.d("FilteredCitiesScreen", "Thành phố ${city.name} với mô tả '$description' (code=$weatherCode): " +
+                              "codeMatches=$codeMatches, descMatches=$descMatches, finalMatch=$matches")
+                        
+                        // Chỉ giữ lại những thành phố khớp với bộ lọc thời tiết
+                        matches
+                    } else {
+                        false // Bỏ qua các thành phố đang tải dữ liệu
+                    }
                 }
             }
         }
@@ -233,87 +253,66 @@ fun FilteredCitiesScreen(
             }
 
             // Thêm card tổng kết kết quả lọc
-            Card(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(bottom = 16.dp),
-                colors = CardDefaults.cardColors(
-                    containerColor = if (displayCities.isNotEmpty()) {
-                        if (isNightTime) Color(0xFF38A169).copy(alpha = 0.2f) else Color(0xFF4CAF50).copy(alpha = 0.2f)
-                    } else {
-                        if (isNightTime) Color(0xFFFC8181).copy(alpha = 0.2f) else Color(0xFFE57373).copy(alpha = 0.2f)
-                    }
-                ),
-                shape = RoundedCornerShape(12.dp)
-            ) {
-                Column(
+            if (displayCities.isNotEmpty()) {
+                Card(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(16.dp)
+                        .padding(bottom = 16.dp),
+                    colors = CardDefaults.cardColors(
+                        containerColor = if (isNightTime) Color(0xFF38A169).copy(alpha = 0.2f) else Color(0xFF4CAF50).copy(alpha = 0.2f)
+                    ),
+                    shape = RoundedCornerShape(12.dp)
                 ) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Icon(
-                            painter = painterResource(
-                                id = if (displayCities.isNotEmpty()) android.R.drawable.ic_menu_info_details else android.R.drawable.ic_dialog_alert
-                            ),
-                            contentDescription = "Kết quả lọc",
-                            tint = if (displayCities.isNotEmpty()) {
-                                if (isNightTime) Color(0xFF38A169) else Color(0xFF4CAF50)
-                            } else {
-                                if (isNightTime) Color(0xFFFC8181) else Color(0xFFE57373)
-                            }
-                        )
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Column {
-                            Text(
-                                text = if (displayCities.isNotEmpty()) "Tìm thấy ${displayCities.size} thành phố phù hợp" else "Không tìm thấy thành phố nào phù hợp",
-                                fontSize = 16.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = if (displayCities.isNotEmpty()) {
-                                    if (isNightTime) Color(0xFF38A169) else Color(0xFF4CAF50)
-                                } else {
-                                    if (isNightTime) Color(0xFFFC8181) else Color(0xFFE57373)
-                                }
-                            )
-                            Text(
-                                text = if (displayCities.isNotEmpty()) "Kết quả lọc theo các tiêu chí đã chọn" else "Hãy thử điều chỉnh bộ lọc",
-                                fontSize = 12.sp,
-                                color = if (displayCities.isNotEmpty()) {
-                                    if (isNightTime) Color(0xFF38A169) else Color(0xFF4CAF50)
-                                } else {
-                                    if (isNightTime) Color(0xFFFC8181) else Color(0xFFE57373)
-                                }
-                            )
-                        }
-                    }
-                    
-                    // Nút áp dụng bộ lọc mới
-                    Button(
-                        onClick = { onBackClick() },
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = if (displayCities.isNotEmpty()) {
-                                if (isNightTime) Color(0xFF38A169) else Color(0xFF4CAF50)
-                            } else {
-                                if (isNightTime) Color(0xFFFC8181) else Color(0xFFE57373)
-                            },
-                            contentColor = Color.White
-                        ),
+                    Column(
                         modifier = Modifier
-                            .padding(start = 8.dp)
-                            .height(36.dp),
-                        shape = RoundedCornerShape(18.dp)
+                            .fillMaxWidth()
+                            .padding(16.dp)
                     ) {
-                        Text(
-                            text = "Lọc lại",
-                            fontSize = 12.sp
-                            )
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(
+                                    painter = painterResource(id = android.R.drawable.ic_menu_info_details),
+                                    contentDescription = "Kết quả lọc",
+                                    tint = if (isNightTime) Color(0xFF38A169) else Color(0xFF4CAF50)
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Column {
+                                    Text(
+                                        text = "Tìm thấy ${displayCities.size} thành phố phù hợp",
+                                        fontSize = 16.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = if (isNightTime) Color(0xFF38A169) else Color(0xFF4CAF50)
+                                    )
+                                    Text(
+                                        text = "Kết quả lọc theo các tiêu chí đã chọn",
+                                        fontSize = 12.sp,
+                                        color = if (isNightTime) Color(0xFF38A169) else Color(0xFF4CAF50)
+                                    )
+                                }
+                            }
+                            // Nút áp dụng bộ lọc mới
+                            Button(
+                                onClick = { onBackClick() },
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = if (isNightTime) Color(0xFF38A169) else Color(0xFF4CAF50),
+                                    contentColor = Color.White
+                                ),
+                                modifier = Modifier
+                                    .padding(start = 8.dp)
+                                    .height(36.dp),
+                                shape = RoundedCornerShape(18.dp)
+                            ) {
+                                Text(
+                                    text = "Lọc lại",
+                                    fontSize = 12.sp
+                                )
+                            }
                         }
                     }
                 }
@@ -362,58 +361,52 @@ fun FilteredCitiesScreen(
             
             // Danh sách thành phố
             if (displayCities.isEmpty()) {
-                // Hiển thị thông báo khi không có kết quả
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(16.dp),
-                    contentAlignment = Alignment.Center
+                Column(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalAlignment = Alignment.CenterHorizontally
                 ) {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Icon(
-                            painter = painterResource(id = android.R.drawable.ic_menu_info_details),
-                            contentDescription = "Info",
-                            tint = if (isNightTime) Color.White else Color(0xFF5372dc),
-                            modifier = Modifier.size(64.dp)
-                        )
-                        Spacer(modifier = Modifier.height(16.dp))
-                        Text(
-                            text = if (viewModel.weatherStateFilter != "Tất cả") 
-                                "Không có thành phố nào có thời tiết \"${viewModel.weatherStateFilter}\""
-                            else
-                                "Không có thành phố nào phù hợp với bộ lọc",
-                            fontSize = 16.sp,
-                            color = if (isNightTime) Color.White else Color(0xFF5372dc),
-                            textAlign = TextAlign.Center
-                        )
-                        Spacer(modifier = Modifier.height(8.dp))
-                        Text(
-                            text = if (viewModel.weatherStateFilter != "Tất cả")
-                                "Hãy tắt chế độ \"Chỉ hiện thành phố có thời tiết ${viewModel.weatherStateFilter}\" hoặc thử điều chỉnh bộ lọc"
-                            else
-                                "Hãy thử điều chỉnh bộ lọc hoặc thêm thành phố mới",
-                            fontSize = 14.sp,
-                            color = if (isNightTime) Color.White.copy(alpha = 0.8f) else Color(0xFF5372dc).copy(alpha = 0.8f),
-                            textAlign = TextAlign.Center
-                        )
-                        
-                        if (viewModel.weatherStateFilter != "Tất cả") {
-                            Spacer(modifier = Modifier.height(16.dp))
-                            Button(
-                                onClick = { viewModel.updateFilters(weatherState = "Tất cả") },
-                                colors = ButtonDefaults.buttonColors(
-                                    containerColor = if (isNightTime) Color.White else Color(0xFF5372dc)
+                    // Cảnh báo đỏ
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .background(
+                                color = if (isNightTime) Color(0xFFFC8181) else Color(0xFFE57373),
+                                shape = RoundedCornerShape(12.dp)
+                            )
+                            .padding(16.dp)
+                    ) {
+                        Column(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(
+                                    painter = painterResource(id = android.R.drawable.ic_dialog_alert),
+                                    contentDescription = null,
+                                    tint = Color.White,
+                                    modifier = Modifier.size(20.dp)
                                 )
-                            ) {
-                                Text("Xem tất cả trạng thái thời tiết")
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text(
+                                    text = "Không tìm thấy thành phố nào phù hợp",
+                                    color = Color.White,
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 16.sp
+                                )
                             }
+                            Text(
+                                text = "Hãy thử điều chỉnh bộ lọc",
+                                color = Color.White,
+                                fontSize = 13.sp,
+                                modifier = Modifier.padding(top = 4.dp)
+                            )
                         }
                     }
                 }
             } else if (loadingTimeoutReached && displayCities.all { city ->
-                        viewModel.weatherDataMap[city.name] == null || 
-                        viewModel.weatherDataMap[city.name]?.timeList?.isEmpty() == true
-                    }) {
+                viewModel.weatherDataMap[city.name] == null || 
+                viewModel.weatherDataMap[city.name]?.timeList?.isEmpty() == true
+            }) {
                 // Hiển thị thông báo khi hết thời gian tải dữ liệu
                 Box(
                     modifier = Modifier

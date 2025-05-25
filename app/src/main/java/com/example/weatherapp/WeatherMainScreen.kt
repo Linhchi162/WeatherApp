@@ -77,6 +77,7 @@ import com.google.android.gms.maps.model.LatLngBounds
 import com.google.android.gms.maps.model.GroundOverlayOptions
 import com.google.android.gms.maps.model.BitmapDescriptorFactory
 import com.google.android.gms.maps.model.GroundOverlay
+import com.google.android.gms.maps.model.MarkerOptions
 import com.google.android.gms.maps.GoogleMap
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
@@ -147,6 +148,13 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.layout.onSizeChanged
 import kotlin.math.roundToInt // Added for rounding
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
+import androidx.compose.foundation.gestures.scrollBy
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.pointer.util.VelocityTracker
+import androidx.compose.ui.zIndex
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.launch
 
 // ========== Utility Functions ==========
 // Hàm kiểm tra mạng
@@ -1372,6 +1380,7 @@ private fun SimpleWeatherMap(
     var googleMap by remember { mutableStateOf<GoogleMap?>(null) }
     var mapView by remember { mutableStateOf<MapView?>(null) }
     var lastLoadedLayer by remember { mutableStateOf("") }
+    var currentMarker by remember { mutableStateOf<com.google.android.gms.maps.model.Marker?>(null) }
 
     // Get ViewModel from LocalContext
     val context = LocalContext.current
@@ -1402,6 +1411,17 @@ private fun SimpleWeatherMap(
                         
                         withContext(Dispatchers.Main) {
                             googleMap?.clear()
+                            
+                            // Restore marker immediately after clear
+                            val cityLocation = LatLng(city.latitude, city.longitude)
+                            currentMarker = googleMap?.addMarker(
+                                MarkerOptions()
+                                    .position(cityLocation)
+                                    .icon(BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_RED))
+                                    .title(city.name)
+                                    .anchor(0.5f, 0.5f)
+                                    .zIndex(1.0f)
+                            )
                             
                             val transparency = when (layer) {
                                 "precipitation" -> 0.0f
@@ -1470,6 +1490,17 @@ private fun SimpleWeatherMap(
                             withContext(Dispatchers.Main) {
                                 if (tilesToLoad.isNotEmpty() && googleMap != null) {
                                     googleMap!!.clear()
+                                    
+                                    // Always restore marker first
+                                    val cityLocation = LatLng(city.latitude, city.longitude)
+                                    currentMarker = googleMap!!.addMarker(
+                                        MarkerOptions()
+                                            .position(cityLocation)
+                                            .icon(BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_RED))
+                                            .title(city.name)
+                                            .anchor(0.5f, 0.5f)
+                                            .zIndex(1.0f)
+                                    )
                                     
                                     val transparency = when (layer) {
                                         "precipitation" -> 0.0f
@@ -1540,14 +1571,25 @@ private fun SimpleWeatherMap(
                 getMapAsync { map ->
                     val cityLocation = LatLng(city.latitude, city.longitude)
                     map.moveCamera(
-                        CameraUpdateFactory.newLatLngZoom(cityLocation, 5.5f)
+                        CameraUpdateFactory.newLatLngZoom(cityLocation, 8.5f)
+                    )
+                    
+                    currentMarker = map.addMarker(
+                        MarkerOptions()
+                            .position(cityLocation)
+                            .icon(BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_RED))
+                            .title(city.name)
+                            .anchor(0.5f, 0.5f)
+                            .zIndex(1.0f)
                     )
 
                     map.uiSettings.isZoomControlsEnabled = false
-                    map.uiSettings.isScrollGesturesEnabled = true
-                    map.uiSettings.isZoomGesturesEnabled = true
+                    map.uiSettings.isScrollGesturesEnabled = false
+                    map.uiSettings.isZoomGesturesEnabled = false
                     map.uiSettings.isRotateGesturesEnabled = false
                     map.uiSettings.isCompassEnabled = false
+                    map.uiSettings.isTiltGesturesEnabled = false
+                    map.uiSettings.isMapToolbarEnabled = false
                     map.mapType = GoogleMap.MAP_TYPE_NORMAL
 
                     googleMap = map
@@ -2558,6 +2600,12 @@ fun CityManagementScreen(
     var cities by remember { mutableStateOf(viewModel.citiesList) }
     var showSearchOverlay by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
+    val listState = rememberLazyListState()
+    
+    // Drag & Drop states
+    var isDragging by remember { mutableStateOf(false) }
+    var draggedItemIndex by remember { mutableStateOf<Int?>(null) }
+    var draggedOffset by remember { mutableStateOf(0f) }
     
     // Theo dõi các thay đổi trong danh sách thành phố từ ViewModel
     LaunchedEffect(viewModel.citiesList) {
@@ -2587,23 +2635,22 @@ fun CityManagementScreen(
                     }
                 },
                 actions = {
-                    // Nút tìm kiếm
                     IconButton(onClick = { showSearchOverlay = true }) {
                         Icon(
-                            painter = painterResource(id = R.drawable.kinh_lup),
-                            contentDescription = "Tìm kiếm thành phố",
+                            painter = painterResource(id = R.drawable.ic_add),
+                            contentDescription = "Thêm thành phố mới",
                             tint = Color(0xFF5372dc)
                         )
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = Color.White.copy(alpha = 0.8f)
+                    containerColor = Color.Transparent
                 )
             )
 
             // Instructions text
             Text(
-                text = "Quản lý danh sách thành phố của bạn. Nhấn nút tìm kiếm để thêm thành phố mới.",
+                text = "Quản lý danh sách thành phố của bạn. Giữ và kéo để sắp xếp lại thứ tự.",
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(horizontal = 16.dp, vertical = 8.dp),
@@ -2612,16 +2659,85 @@ fun CityManagementScreen(
                 textAlign = TextAlign.Center
             )
 
-            // City list
+            // City list with drag & drop
             LazyColumn(
+                state = listState,
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(horizontal = 16.dp, vertical = 8.dp)
+                    .pointerInput(Unit) {
+                        detectDragGesturesAfterLongPress(
+                            onDragStart = { offset ->
+                                listState.layoutInfo.visibleItemsInfo.firstOrNull { item ->
+                                    offset.y.toInt() in item.offset..(item.offset + item.size)
+                                }?.let { item ->
+                                    isDragging = true
+                                    draggedItemIndex = item.index
+                                }
+                            },
+                            onDragEnd = {
+                                isDragging = false
+                                draggedItemIndex?.let { draggedIdx ->
+                                    // Cập nhật thứ tự trong ViewModel
+                                    viewModel.reorderCities(cities)
+                                }
+                                draggedItemIndex = null
+                                draggedOffset = 0f
+                            },
+                            onDragCancel = {
+                                isDragging = false
+                                draggedItemIndex = null
+                                draggedOffset = 0f
+                            },
+                            onDrag = { change, dragAmount ->
+                                change.consumeAllChanges()
+                                draggedOffset += dragAmount.y
+                                
+                                draggedItemIndex?.let { currentIndex ->
+                                    val visibleItems = listState.layoutInfo.visibleItemsInfo
+                                    val draggedItem = visibleItems.firstOrNull { it.index == currentIndex }
+                                    draggedItem?.let { item ->
+                                        val itemHeight = item.size
+                                        // Nếu kéo xuống dưới
+                                        if (draggedOffset > itemHeight / 2 && currentIndex < cities.lastIndex) {
+                                            val newList = cities.toMutableList()
+                                            Collections.swap(newList, currentIndex, currentIndex + 1)
+                                            cities = newList
+                                            draggedItemIndex = currentIndex + 1
+                                            draggedOffset -= itemHeight
+                                        }
+                                        // Nếu kéo lên trên
+                                        else if (draggedOffset < -itemHeight / 2 && currentIndex > 0) {
+                                            val newList = cities.toMutableList()
+                                            Collections.swap(newList, currentIndex, currentIndex - 1)
+                                            cities = newList
+                                            draggedItemIndex = currentIndex - 1
+                                            draggedOffset += itemHeight
+                                        }
+                                    }
+                                }
+                                // Auto-scroll logic giữ nguyên
+                                val maxOffset = listState.layoutInfo.viewportEndOffset
+                                val minOffset = listState.layoutInfo.viewportStartOffset
+                                when {
+                                    draggedOffset > maxOffset -> scope.launch {
+                                        listState.scrollBy(50f)
+                                    }
+                                    draggedOffset < minOffset -> scope.launch {
+                                        listState.scrollBy(-50f)
+                                    }
+                                }
+                            }
+                        )
+                    }
             ) {
                 itemsIndexed(
                     items = cities,
                     key = { _, item -> item.name }
                 ) { index, city ->
+                    val isDragged = index == draggedItemIndex
+                    val elevation = if (isDragged) 8.dp else 0.dp
+                    
                     SimpleCityItem(
                         city = city,
                         weatherData = viewModel.weatherDataMap[city.name],
@@ -2630,7 +2746,16 @@ fun CityManagementScreen(
                                 viewModel.deleteCity(city.name)
                                 cities = viewModel.citiesList
                             }
-                        }
+                        },
+                        modifier = Modifier
+                            .graphicsLayer {
+                                if (isDragged) {
+                                    translationY = draggedOffset
+                                    scaleX = 1.05f
+                                    scaleY = 1.05f
+                                }
+                            }
+                            .zIndex(if (isDragged) 1f else 0f)
                     )
                     
                     Spacer(modifier = Modifier.height(8.dp))
@@ -2661,9 +2786,7 @@ fun CityManagementScreen(
         if (showSearchOverlay) {
             SearchOverlay(
                 onBackClick = { showSearchOverlay = false },
-                onFilterClick = { 
-                    // Có thể thêm logic để mở SearchScreen từ đây nếu cần
-                },
+                onFilterClick = { },
                 onDismiss = {
                     viewModel.clearSearch()
                     showSearchOverlay = false
@@ -2679,82 +2802,55 @@ fun CityManagementScreen(
 fun SimpleCityItem(
     city: City,
     weatherData: WeatherDataState?,
-    onDelete: () -> Unit
+    onDelete: () -> Unit,
+    modifier: Modifier = Modifier
 ) {
-    val currentWeatherCode = weatherData?.weatherCodeList?.getOrNull(0) ?: 0
-    val currentTemp = weatherData?.temperatureList?.getOrNull(0)?.toInt() ?: 0
-    val weatherIcon = getWeatherIcon(currentWeatherCode)
-    
     Card(
-        modifier = Modifier
+        modifier = modifier
             .fillMaxWidth()
-            .shadow(
-                elevation = 2.dp,
-                shape = RoundedCornerShape(10.dp)
-            ),
+            .padding(vertical = 4.dp),
         colors = CardDefaults.cardColors(
             containerColor = Color.White.copy(alpha = 0.8f)
         ),
-        shape = RoundedCornerShape(10.dp)
+        shape = RoundedCornerShape(12.dp)
     ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(vertical = 12.dp, horizontal = 16.dp),
+                .padding(16.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            // Drag handle icon (decorative only in this simplified version)
-            Icon(
-                painter = painterResource(id = R.drawable.drag_handle),
-                contentDescription = null,
-                tint = Color(0xFF5372dc),
-                modifier = Modifier.padding(end = 16.dp)
-            )
-            
-            // City info
-            Column(
-                modifier = Modifier.weight(1f)
-            ) {
+            Column {
                 Text(
                     text = city.name,
                     fontSize = 16.sp,
                     fontWeight = FontWeight.Bold,
                     color = Color(0xFF5372dc)
                 )
+                if (city.country != null) {
                 Text(
-                    text = city.country ?: "",
-                    fontSize = 12.sp,
+                        text = city.country,
+                        fontSize = 14.sp,
                     color = Color(0xFF5372dc).copy(alpha = 0.7f)
                 )
-            }
-            
-            // Weather info if available
-            if (weatherData != null) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(
-                        text = "$currentTemp°",
-                        fontSize = 20.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = Color(0xFF5372dc)
-                    )
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Image(
-                        painter = painterResource(id = weatherIcon),
-                        contentDescription = null,
-                        modifier = Modifier.size(30.dp)
-                    )
                 }
             }
             
-            // Delete button
-            IconButton(onClick = onDelete) {
-                Icon(
-                    painter = painterResource(id = R.drawable.ic_delete),
-                    contentDescription = "Xóa",
-                    tint = Color.Red.copy(alpha = 0.7f)
-                )
+                Row(
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                // Delete button
+                IconButton(
+                    onClick = onDelete,
+                    modifier = Modifier.size(24.dp)
+                ) {
+                    Icon(
+                        painter = painterResource(id = android.R.drawable.ic_menu_delete),
+                        contentDescription = "Xóa",
+                        tint = Color(0xFF5372dc)
+                    )
+                }
             }
         }
     }
@@ -3794,7 +3890,7 @@ fun WeatherFilterScreen(
             .background(
                 brush = Brush.verticalGradient(
                     colors = if (isNightTime) 
-                        listOf(Color(0xFF1A202C), Color(0xFF2D3748)) 
+                        listOf(Color(0xFF1A202C), Color(0xFF1A202C))
                     else 
                         listOf(Color(0xFFcbdfff), Color(0xFFfcdbf6))
                 )
@@ -3928,7 +4024,10 @@ fun WeatherFilterScreen(
             ) {
                 Text(
                     text = viewModel.weatherStateFilter,
-                    color = if (isNightTime) Color.White else Color(0xFF5372dc)
+                    color = if (isNightTime) Color.White else Color(0xFF5372dc),
+                    style = MaterialTheme.typography.bodyLarge.copy(
+                        color = if (isNightTime) Color.White else Color(0xFF5372dc)
+                    )
                 )
             }
             DropdownMenu(

@@ -1260,7 +1260,24 @@ class WeatherViewModel(
                     "VN" -> listOf(
                         City("Hà Nội", 21.0285, 105.8542, "Việt Nam"),
                         City("TP. Hồ Chí Minh", 10.7769, 106.7009, "Việt Nam"),
-                        City("Đà Nẵng", 16.0544, 108.2022, "Việt Nam")
+                        City("Đà Nẵng", 16.0544, 108.2022, "Việt Nam"),
+                        City("Cần Thơ", 10.0452, 105.7469, "Việt Nam"),
+                        City("Hải Phòng", 20.8449, 106.6881, "Việt Nam"),
+                        City("Huế", 16.4619, 107.5909, "Việt Nam"),
+                        City("Nha Trang", 12.2388, 109.1967, "Việt Nam"),
+                        City("Buôn Ma Thuột", 12.6667, 108.0500, "Việt Nam"),
+                        City("Quy Nhơn", 13.7765, 109.2233, "Việt Nam"),
+                        City("Thái Nguyên", 21.5672, 105.8252, "Việt Nam"),
+                        City("Vinh", 18.6734, 105.6923, "Việt Nam"),
+                        City("Biên Hòa", 10.9574, 106.8426, "Việt Nam"),
+                        City("Hạ Long", 20.9101, 107.1839, "Việt Nam"),
+                        City("Long Xuyên", 10.3867, 105.4352, "Việt Nam"),
+                        City("Nam Định", 20.4333, 106.1667, "Việt Nam"),
+                        City("Phan Thiết", 10.9378, 108.1100, "Việt Nam"),
+                        City("Pleiku", 13.9833, 108.0000, "Việt Nam"),
+                        City("Rạch Giá", 10.0167, 105.0833, "Việt Nam"),
+                        City("Thủ Dầu Một", 10.9797, 106.6507, "Việt Nam"),
+                        City("Việt Trì", 21.3000, 105.4333, "Việt Nam")
                     )
                     "KR" -> listOf(
                         City("Seoul", 37.5665, 126.9780, "Hàn Quốc"),
