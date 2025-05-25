@@ -12,7 +12,6 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.ui.window.Dialog
-import android.R
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -28,10 +27,12 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Brush
 
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
@@ -40,6 +41,7 @@ import androidx.localbroadcastmanager.content.LocalBroadcastManager
 import androidx.work.*
 import java.util.Locale
 import java.util.concurrent.TimeUnit
+import java.time.LocalTime
 
 class SettingsActivity : ComponentActivity() {
 
@@ -90,6 +92,28 @@ fun SettingsScreen(
     val context = LocalContext.current
     val preferences = context.getSharedPreferences("weather_prefs", Context.MODE_PRIVATE)
     val editor = preferences.edit()
+
+    // Dark mode detection based on time
+    val currentTime = LocalTime.now()
+    val isDarkMode = currentTime.hour < 6 || currentTime.hour >= 18
+    
+    // Colors based on theme
+    val backgroundColor = if (isDarkMode) {
+        Color(0xFF1A202C)
+    } else {
+        Color.White
+    }
+    
+    val cardBackgroundColor = if (isDarkMode) {
+        Color(0xFF2D3748)
+    } else {
+        Color(0xFFFAF6FF)
+    }
+    
+    val textColor = if (isDarkMode) Color.White else Color(0xFF5372dc)
+    val secondaryTextColor = if (isDarkMode) Color.White.copy(alpha = 0.7f) else Color(0xFF5372dc)
+    val iconTint = if (isDarkMode) Color.White else Color(0xFF5372dc)
+    val switchColor = if (isDarkMode) Color(0xFF4A5568) else Color(0xFF5372dc)
 
     var startTime by remember { mutableStateOf(preferences.getString("rain_alert_start_time", "6:00") ?: "6:00") }
     var endTime by remember { mutableStateOf(preferences.getString("rain_alert_end_time", "22:00") ?: "22:00") }
@@ -146,8 +170,7 @@ fun SettingsScreen(
     Column(
         modifier = Modifier
             .fillMaxSize()
-
-            .background(Color.White)
+            .background(backgroundColor)
             .padding(16.dp)
     ) {
 
@@ -160,18 +183,16 @@ fun SettingsScreen(
         ) {
             IconButton(onClick = onBackClick) {
                 Icon(
-
-                    painter = painterResource(id = android.R.drawable.ic_menu_zoom),
-
+                    painter = painterResource(id = R.drawable.ic_back),
                     contentDescription = "Back",
-                    tint = Color(0xFF5372dc)
+                    tint = iconTint
                 )
             }
             Text(
                 text = "Cài đặt",
                 fontSize = 20.sp,
                 fontWeight = FontWeight.Bold,
-                color = Color(0xFF5372dc)
+                color = textColor
             )
 
             Spacer(modifier = Modifier.width(48.dp))
@@ -181,14 +202,14 @@ fun SettingsScreen(
         Text(
             text = "Cảnh báo thời tiết",
             fontSize = 14.sp,
-            color = Color(0xFF5372dc),
+            color = textColor,
             modifier = Modifier.padding(start = 16.dp)
         )
         Spacer(modifier = Modifier.height(6.dp))
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .background(Color(0xFFFAF6FF), shape = RoundedCornerShape(15.dp))
+                .background(cardBackgroundColor, shape = RoundedCornerShape(15.dp))
                 .padding(16.dp)
         ) {
             Row(
@@ -200,7 +221,7 @@ fun SettingsScreen(
                     text = "Cảnh báo mưa",
                     fontSize = 16.sp,
                     fontWeight = FontWeight.Medium,
-                    color = Color(0xFF5372dc)
+                    color = textColor
                 )
                 Switch(
 
@@ -241,16 +262,10 @@ fun SettingsScreen(
                     },
 
                     colors = SwitchDefaults.colors(
-                        checkedThumbColor = Color(0xFF5372dc),
-                        uncheckedThumbColor = Color(0xFF60616B),
-                        checkedTrackColor = Color(0xFF5372dc).copy(alpha = 0.5f),
-
-                        uncheckedTrackColor = Color.White.copy(alpha = 0f),
-
-                        disabledCheckedThumbColor = Color.Gray,
-                        disabledUncheckedThumbColor = Color.Gray,
-                        disabledCheckedTrackColor = Color.LightGray,
-                        disabledUncheckedTrackColor = Color.LightGray,
+                        checkedThumbColor = Color.White,
+                        checkedTrackColor = switchColor,
+                        uncheckedThumbColor = Color.White,
+                        uncheckedTrackColor = Color.Gray.copy(alpha = 0.5f)
                     )
                 )
             }
@@ -267,12 +282,12 @@ fun SettingsScreen(
                     text = "Từ",
                     fontWeight = FontWeight.Medium,
                     style = MaterialTheme.typography.bodyLarge,
-                    color = Color(0xFF5372dc)
+                    color = secondaryTextColor
                 )
                 Text(
                     text = startTime,
                     style = MaterialTheme.typography.bodyLarge,
-                    color = Color(0xFF5372dc),
+                    color = textColor,
                     modifier = Modifier
                         .clickable { showStartTimePicker = true }
 
@@ -290,12 +305,12 @@ fun SettingsScreen(
                     text = "Đến",
                     style = MaterialTheme.typography.bodyLarge,
                     fontWeight = FontWeight.Medium,
-                    color = Color(0xFF5372dc)
+                    color = secondaryTextColor
                 )
                 Text(
                     text = endTime,
                     style = MaterialTheme.typography.bodyLarge,
-                    color = Color(0xFF5372dc),
+                    color = textColor,
                     modifier = Modifier
                         .clickable { showEndTimePicker = true }
 
@@ -318,7 +333,9 @@ fun SettingsScreen(
                         LocalBroadcastManager.getInstance(context).sendBroadcast(intent)
 
                     },
-                    onDismiss = { showStartTimePicker = false }
+                    onDismiss = { showStartTimePicker = false },
+                    textColor = textColor,
+                    backgroundColor = cardBackgroundColor
                 )
             }
             if (showEndTimePicker) {
@@ -335,7 +352,9 @@ fun SettingsScreen(
                         LocalBroadcastManager.getInstance(context).sendBroadcast(intent)
 
                     },
-                    onDismiss = { showEndTimePicker = false }
+                    onDismiss = { showEndTimePicker = false },
+                    textColor = textColor,
+                    backgroundColor = cardBackgroundColor
                 )
             }
 
@@ -349,7 +368,7 @@ fun SettingsScreen(
                     text = "Cảnh báo thời tiết khắc nghiệt",
                     fontSize = 16.sp,
                     fontWeight = FontWeight.Medium,
-                    color = Color(0xFF5372dc)
+                    color = textColor
                 )
                 Switch(
 
@@ -388,16 +407,10 @@ fun SettingsScreen(
                     },
 
                     colors = SwitchDefaults.colors(
-                        checkedThumbColor = Color(0xFF5372dc),
-                        uncheckedThumbColor = Color(0xFF60616B),
-                        checkedTrackColor = Color(0xFF5372dc).copy(alpha = 0.5f),
-
-                        uncheckedTrackColor = Color.White.copy(alpha = 0f),
-
-                        disabledCheckedThumbColor = Color.Gray,
-                        disabledUncheckedThumbColor = Color.Gray,
-                        disabledCheckedTrackColor = Color.LightGray,
-                        disabledUncheckedTrackColor = Color.LightGray,
+                        checkedThumbColor = Color.White,
+                        checkedTrackColor = switchColor,
+                        uncheckedThumbColor = Color.White,
+                        uncheckedTrackColor = Color.Gray.copy(alpha = 0.5f)
                     )
                 )
             }
@@ -411,7 +424,7 @@ fun SettingsScreen(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .background(Color(0xFFFAF6FF), shape = RoundedCornerShape(15.dp))
+                .background(cardBackgroundColor, shape = RoundedCornerShape(15.dp))
                 .padding(16.dp)
         ) {
             Row(
@@ -426,7 +439,7 @@ fun SettingsScreen(
                         text = "Dự báo thời tiết hàng ngày",
                         fontSize = 16.sp,
                         fontWeight = FontWeight.Medium,
-                        color = Color(0xFF5372dc)
+                        color = textColor
                     )
                     Spacer(modifier = Modifier.height(4.dp))
                     Text(
@@ -434,7 +447,7 @@ fun SettingsScreen(
                         text = "Nhận thông tin cập nhật về thời tiết định kỳ cho thành phố hiện tại của bạn hai lần một ngày, một lần cho ngày hôm nay và một lần khác cho ngày mai.",
 
                         fontSize = 13.sp,
-                        color = Color(0xFF7380BB)
+                        color = secondaryTextColor
                     )
                 }
                 Spacer(modifier = Modifier.width(5.dp))
@@ -465,16 +478,10 @@ fun SettingsScreen(
                     },
 
                     colors = SwitchDefaults.colors(
-                        checkedThumbColor = Color(0xFF5372dc),
-                        uncheckedThumbColor = Color(0xFF60616B),
-                        checkedTrackColor = Color(0xFF5372dc).copy(alpha = 0.5f),
-
-                        uncheckedTrackColor = Color.White.copy(alpha = 0f),
-
-                        disabledCheckedThumbColor = Color.Gray,
-                        disabledUncheckedThumbColor = Color.Gray,
-                        disabledCheckedTrackColor = Color.LightGray,
-                        disabledUncheckedTrackColor = Color.LightGray,
+                        checkedThumbColor = Color.White,
+                        checkedTrackColor = switchColor,
+                        uncheckedThumbColor = Color.White,
+                        uncheckedTrackColor = Color.Gray.copy(alpha = 0.5f)
                     )
                 )
             }
@@ -485,7 +492,7 @@ fun SettingsScreen(
         Text(
             text = "Đơn vị",
             fontSize = 14.sp,
-            color = Color(0xFF5372dc),
+            color = textColor,
             modifier = Modifier.padding(start = 16.dp)
         )
         Spacer(modifier = Modifier.height(6.dp))
@@ -495,7 +502,7 @@ fun SettingsScreen(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .background(Color(0xFFFAF6FF), shape = RoundedCornerShape(15.dp))
+                .background(cardBackgroundColor, shape = RoundedCornerShape(15.dp))
                 .padding(16.dp)
         ) {
             UnitItem(
@@ -504,7 +511,9 @@ fun SettingsScreen(
                 onClick = {
                     currentUnitType = "Nhiệt độ"
                     showUnitDialog = true
-                }
+                },
+                textColor = textColor,
+                secondaryTextColor = secondaryTextColor
             )
             UnitItem(
                 label = "Gió",
@@ -512,7 +521,9 @@ fun SettingsScreen(
                 onClick = {
                     currentUnitType = "Gió"
                     showUnitDialog = true
-                }
+                },
+                textColor = textColor,
+                secondaryTextColor = secondaryTextColor
             )
             UnitItem(
                 label = "Áp suất không khí",
@@ -520,7 +531,9 @@ fun SettingsScreen(
                 onClick = {
                     currentUnitType = "Áp suất không khí"
                     showUnitDialog = true
-                }
+                },
+                textColor = textColor,
+                secondaryTextColor = secondaryTextColor
             )
             UnitItem(
                 label = "Tầm nhìn",
@@ -528,7 +541,9 @@ fun SettingsScreen(
                 onClick = {
                     currentUnitType = "Tầm nhìn"
                     showUnitDialog = true
-                }
+                },
+                textColor = textColor,
+                secondaryTextColor = secondaryTextColor
             )
         }
 
@@ -537,7 +552,6 @@ fun SettingsScreen(
             val unitOptions = when (currentUnitType) {
                 "Nhiệt độ" -> listOf("Độ C (°C)", "Độ F (°F)")
                 "Gió" -> listOf("Thang đo Beaufort", "Kilomet mỗi giờ (km/h)", "Mét mỗi giây (m/s)", "Feet mỗi giây (ft/s)", "Dặm mỗi giờ (mph)", "Hải lý mỗi giờ (hải lý)")
-
                 "Áp suất không khí" -> listOf("Hectopascal (hPa)", "Millimet thủy ngân (mmHg)", "Inch thủy ngân (inHg)", "Millibar (mb)", "Pound trên inch vuông (psi)")
                 "Tầm nhìn" -> listOf("Kilomet (km)", "Dặm (mi)", "Mét (m)", "Feet (ft)")
                 else -> emptyList()
@@ -547,7 +561,6 @@ fun SettingsScreen(
                 title = currentUnitType,
                 options = unitOptions,
                 onUnitSelected = { selectedUnit ->
-
                     try {
                         when (currentUnitType) {
                             "Nhiệt độ" -> {
@@ -578,16 +591,23 @@ fun SettingsScreen(
                     } finally {
                         showUnitDialog = false
                     }
-
                 },
-                onDismiss = { showUnitDialog = false }
+                onDismiss = { showUnitDialog = false },
+                textColor = textColor,
+                backgroundColor = cardBackgroundColor
             )
         }
     }
 }
 
 @Composable
-fun UnitItem(label: String, selectedValue: String, onClick: () -> Unit) {
+fun UnitItem(
+    label: String, 
+    selectedValue: String, 
+    onClick: () -> Unit,
+    textColor: Color,
+    secondaryTextColor: Color
+) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -600,12 +620,12 @@ fun UnitItem(label: String, selectedValue: String, onClick: () -> Unit) {
         Text(
             text = label,
             fontSize = 14.sp,
-            color = Color(0xFF5372dc)
+            color = textColor
         )
         Text(
             text = selectedValue,
             fontSize = 14.sp,
-            color = Color(0xFF7380BB)
+            color = secondaryTextColor
         )
     }
 }
@@ -615,28 +635,27 @@ fun UnitSelectionDialog(
     title: String,
     options: List<String>,
     onUnitSelected: (String) -> Unit,
-    onDismiss: () -> Unit
+    onDismiss: () -> Unit,
+    textColor: Color,
+    backgroundColor: Color
 ) {
     Dialog(onDismissRequest = onDismiss) {
         Box(
             modifier = Modifier
-                .background(Color.White, shape = RoundedCornerShape(20.dp))
+                .background(backgroundColor, shape = RoundedCornerShape(20.dp))
                 .padding(20.dp)
-
                 .width(280.dp)
-
         ) {
             Column {
                 Text(
                     text = title,
                     fontSize = 20.sp,
                     fontWeight = FontWeight.Bold,
-                    color = Color(0xFF5372dc),
+                    color = textColor,
                     modifier = Modifier.padding(bottom = 8.dp)
                 )
 
                 LazyColumn(modifier = Modifier.heightIn(max = 200.dp)) {
-
                     items(options) { option ->
                         Text(
                             text = option,
@@ -645,7 +664,7 @@ fun UnitSelectionDialog(
                                 .clickable { onUnitSelected(option) }
                                 .padding(vertical = 12.dp),
                             fontSize = 16.sp,
-                            color = Color(0xFF5372dc)
+                            color = textColor
                         )
                         Divider(color = Color.LightGray, thickness = 0.5.dp)
                     }
@@ -658,9 +677,10 @@ fun UnitSelectionDialog(
 @Composable
 fun TimePickerDialog(
     onTimeSelected: (String) -> Unit,
-    onDismiss: () -> Unit
+    onDismiss: () -> Unit,
+    textColor: Color,
+    backgroundColor: Color
 ) {
-
     val times = mutableListOf<String>()
     for (hour in 0..23) {
         for (minute in 0..59 step 5) {
@@ -671,44 +691,233 @@ fun TimePickerDialog(
         times.add("23:59")
     }
 
-
     Dialog(onDismissRequest = onDismiss) {
         Box(
             modifier = Modifier
-                .background(Color.White, shape = RoundedCornerShape(20.dp))
+                .background(backgroundColor, shape = RoundedCornerShape(20.dp))
                 .padding(20.dp)
                 .width(200.dp)
                 .heightIn(max = 300.dp)
         ) {
             LazyColumn {
-
                 items(times) { time ->
-
                     Column {
                         Box(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .clickable {
-
                                     onTimeSelected(time)
-
                                     onDismiss()
                                 }
                                 .padding(vertical = 12.dp),
                             contentAlignment = Alignment.Center
                         ) {
                             Text(
-
                                 text = time,
-
                                 fontWeight = FontWeight.Medium,
                                 style = MaterialTheme.typography.bodyLarge,
-                                color = Color(0xFF5372dc)
+                                color = textColor
                             )
                         }
-
                         Divider(color = Color(0xFFBFC5D5), thickness = 0.8.dp)
                     }
+                }
+            }
+        }
+    }
+}
+
+@Preview(showBackground = true)
+@Composable
+fun UnitItemPreview() {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(Color.White)
+            .padding(16.dp)
+    ) {
+        UnitItem(
+            label = "Nhiệt độ",
+            selectedValue = "Độ C (°C)",
+            onClick = {},
+            textColor = Color.Black,
+            secondaryTextColor = Color.Gray
+        )
+        Divider(color = Color.LightGray, thickness = 0.5.dp)
+        UnitItem(
+            label = "Tốc độ gió",
+            selectedValue = "Kilomet mỗi giờ (km/h)",
+            onClick = {},
+            textColor = Color.Black,
+            secondaryTextColor = Color.Gray
+        )
+        Divider(color = Color.LightGray, thickness = 0.5.dp)
+        UnitItem(
+            label = "Áp suất không khí",
+            selectedValue = "Hectopascal (hPa)",
+            onClick = {},
+            textColor = Color.Black,
+            secondaryTextColor = Color.Gray
+        )
+    }
+}
+
+@Preview(showBackground = true)
+@Composable
+fun UnitSelectionDialogPreview() {
+    UnitSelectionDialog(
+        title = "Nhiệt độ",
+        options = listOf("Độ C (°C)", "Độ F (°F)"),
+        onUnitSelected = {},
+        onDismiss = {},
+        textColor = Color.Black,
+        backgroundColor = Color.White
+    )
+}
+
+@Preview(showBackground = true)
+@Composable
+fun TimePickerDialogPreview() {
+    TimePickerDialog(
+        onTimeSelected = {},
+        onDismiss = {},
+        textColor = Color.Black,
+        backgroundColor = Color.White
+    )
+}
+
+@Preview(showBackground = true, heightDp = 600)
+@Composable
+fun SettingsScreenPreview() {
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(
+                brush = Brush.linearGradient(
+                    colors = listOf(Color(0xFF87CEEB), Color(0xFF98FB98))
+                )
+            )
+            .padding(16.dp)
+    ) {
+        // Header
+        Text(
+            text = "Cài đặt",
+            fontSize = 24.sp,
+            fontWeight = FontWeight.Bold,
+            color = Color(0xFF5372dc),
+            modifier = Modifier.padding(bottom = 16.dp)
+        )
+        
+        // Units section
+        Card(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(vertical = 8.dp),
+            colors = CardDefaults.cardColors(
+                containerColor = Color.White.copy(alpha = 0.9f)
+            ),
+            shape = RoundedCornerShape(12.dp)
+        ) {
+            Column(
+                modifier = Modifier.padding(16.dp)
+            ) {
+                Text(
+                    text = "Đơn vị đo lường",
+                    fontSize = 18.sp,
+                    fontWeight = FontWeight.Medium,
+                    color = Color(0xFF5372dc),
+                    modifier = Modifier.padding(bottom = 12.dp)
+                )
+                
+                UnitItem(
+                    label = "Nhiệt độ",
+                    selectedValue = "Độ C (°C)",
+                    onClick = {},
+                    textColor = Color.Black,
+                    secondaryTextColor = Color.Gray
+                )
+                Divider(color = Color.LightGray.copy(alpha = 0.5f), thickness = 0.5.dp)
+                UnitItem(
+                    label = "Tốc độ gió",
+                    selectedValue = "Kilomet mỗi giờ (km/h)",
+                    onClick = {},
+                    textColor = Color.Black,
+                    secondaryTextColor = Color.Gray
+                )
+                Divider(color = Color.LightGray.copy(alpha = 0.5f), thickness = 0.5.dp)
+                UnitItem(
+                    label = "Áp suất không khí",
+                    selectedValue = "Hectopascal (hPa)",
+                    onClick = {},
+                    textColor = Color.Black,
+                    secondaryTextColor = Color.Gray
+                )
+            }
+        }
+        
+        // Notifications section
+        Card(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(vertical = 8.dp),
+            colors = CardDefaults.cardColors(
+                containerColor = Color.White.copy(alpha = 0.9f)
+            ),
+            shape = RoundedCornerShape(12.dp)
+        ) {
+            Column(
+                modifier = Modifier.padding(16.dp)
+            ) {
+                Text(
+                    text = "Thông báo",
+                    fontSize = 18.sp,
+                    fontWeight = FontWeight.Medium,
+                    color = Color(0xFF5372dc),
+                    modifier = Modifier.padding(bottom = 12.dp)
+                )
+                
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 8.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "Dự báo hàng ngày",
+                        fontSize = 14.sp,
+                        color = Color(0xFF5372dc)
+                    )
+                    Switch(
+                        checked = true,
+                        onCheckedChange = {},
+                        colors = SwitchDefaults.colors(
+                            checkedThumbColor = Color(0xFF5372dc),
+                            checkedTrackColor = Color(0xFF5372dc).copy(alpha = 0.5f)
+                        )
+                    )
+                }
+                
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 8.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "Cảnh báo mưa",
+                        fontSize = 14.sp,
+                        color = Color(0xFF5372dc)
+                    )
+                    Switch(
+                        checked = false,
+                        onCheckedChange = {},
+                        colors = SwitchDefaults.colors(
+                            checkedThumbColor = Color(0xFF5372dc),
+                            checkedTrackColor = Color(0xFF5372dc).copy(alpha = 0.5f)
+                        )
+                    )
                 }
             }
         }

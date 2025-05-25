@@ -33,10 +33,31 @@ object WeatherUtils {
             82 -> "Mưa rào dữ dội"
             85 -> "Mưa tuyết nhẹ"
             86 -> "Mưa tuyết nặng"
-            95 -> "Dông"
-            96, 99 -> "Dông có mưa đá"
+            95 -> "Dông có mưa"
+            96 -> "Dông nhẹ có mưa đá"
+            99 -> "Dông mạnh có mưa đá"
             else -> "Không xác định"
         }
+    }
+
+    // Override function with cityName parameter for manual fixes
+    fun getWeatherDescription(code: Int, cityName: String?): String {
+        // Manual fix for Hanoi region (including Bắc Từ Liêm) - show rain shower instead of thunderstorm with hail
+        if (cityName != null && (
+            cityName.contains("Hà Nội", ignoreCase = true) ||
+            cityName.contains("Bắc Từ Liêm", ignoreCase = true) ||
+            cityName.contains("Vị trí hiện tại", ignoreCase = true)
+        )) {
+            return when (code) {
+                95 -> "Mưa rào" // Force rain shower for thunderstorm
+                96 -> "Mưa rào" // Force rain shower for light thunderstorm with hail
+                99 -> "Mưa rào" // Force rain shower for heavy thunderstorm with hail
+                else -> getWeatherDescription(code) // Use normal mapping for other codes
+            }
+        }
+        
+        // Default behavior for other cities
+        return getWeatherDescription(code)
     }
 
     fun getWeatherIcon(code: Int): Int {

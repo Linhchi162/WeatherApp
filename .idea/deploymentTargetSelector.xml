@@ -4,10 +4,10 @@
     <selectionStates>
       <SelectionState runConfigName="MainActivity">
         <option name="selectionMode" value="DROPDOWN" />
-        <DropdownSelection timestamp="2025-05-10T10:16:25.281088500Z">
+        <DropdownSelection timestamp="2025-05-25T10:13:19.426807400Z">
           <Target type="DEFAULT_BOOT">
             <handle>
-              <DeviceId pluginId="LocalEmulator" identifier="path=C:\Users\admin\.android\avd\Small_Phone_API_35.avd" />
+              <DeviceId pluginId="PhysicalDevice" identifier="serial=fb33e78" />
             </handle>
           </Target>
         </DropdownSelection>
@@ -24,13 +24,13 @@
         </DropdownSelection>
         <DialogSelection />
       </SelectionState>
-      <SelectionState runConfigName="SettingsScreenPreview">
-        <option name="selectionMode" value="DROPDOWN" />
-      </SelectionState>
       <SelectionState runConfigName="SearchScreenPreview">
         <option name="selectionMode" value="DROPDOWN" />
       </SelectionState>
       <SelectionState runConfigName="SearchOverlayPreview">
+        <option name="selectionMode" value="DROPDOWN" />
+      </SelectionState>
+      <SelectionState runConfigName="WeatherComponentsCollectionPreview - 🎛️ Weather Components Collection">
         <option name="selectionMode" value="DROPDOWN" />
       </SelectionState>
     </selectionStates>

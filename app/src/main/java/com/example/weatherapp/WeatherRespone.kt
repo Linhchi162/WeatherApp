@@ -25,7 +25,9 @@ class WeatherRespone {
         val temperature_2m_max: List<Double>,
         val temperature_2m_min: List<Double>,
         val weathercode: List<Int>,
-        val precipitation_probability_max: List<Double>
+        val precipitation_probability_max: List<Double>,
+        val sunrise: List<String>,
+        val sunset: List<String>,
     )
 
     data class Current(

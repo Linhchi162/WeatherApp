@@ -27,6 +27,10 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.unit.TextUnit
 import kotlinx.coroutines.delay
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.ui.tooling.preview.Preview
+import androidx.compose.foundation.Image
 
 @Composable
 fun FilteredCitiesScreen(
@@ -34,7 +38,8 @@ fun FilteredCitiesScreen(
     onDismiss: () -> Unit,
     viewModel: WeatherViewModel,
     temperatureUnit: UnitConverter.TemperatureUnit = UnitConverter.TemperatureUnit.CELSIUS,
-    windSpeedUnit: UnitConverter.WindSpeedUnit = UnitConverter.WindSpeedUnit.KMH
+    windSpeedUnit: UnitConverter.WindSpeedUnit = UnitConverter.WindSpeedUnit.KMH,
+    isNightTime: Boolean
 ) {
     var isLoadingData by remember { mutableStateOf(false) }
     var loadingTimeoutReached by remember { mutableStateOf(false) }
@@ -141,7 +146,7 @@ fun FilteredCitiesScreen(
                 .fillMaxHeight(fraction = 0.8f)
                 .background(
                     brush = Brush.verticalGradient(
-                        colors = listOf(Color(0xFFcbdfff), Color(0xFFfcdbf6))
+                        colors = if (isNightTime) listOf(Color(0xFF2D3748), Color(0xFF1A202C)) else listOf(Color(0xFFcbdfff), Color(0xFFfcdbf6))
                     ),
                     shape = RoundedCornerShape(16.dp)
                 )
@@ -159,14 +164,14 @@ fun FilteredCitiesScreen(
                     Icon(
                         painter = painterResource(id = android.R.drawable.ic_menu_close_clear_cancel),
                         contentDescription = "Back",
-                        tint = Color(0xFF5372dc)
+                        tint = if (isNightTime) Color.White else Color(0xFF5372dc)
                     )
                 }
                 Text(
                     text = "Thành phố đã lọc (${displayCities.size})",
                     fontSize = 18.sp,
                     fontWeight = FontWeight.Bold,
-                    color = Color(0xFF5372dc)
+                    color = if (isNightTime) Color.White else Color(0xFF5372dc)
                 )
                 Spacer(modifier = Modifier.width(48.dp))
             }
@@ -177,7 +182,7 @@ fun FilteredCitiesScreen(
                     .fillMaxWidth()
                     .padding(bottom = 16.dp),
                 colors = CardDefaults.cardColors(
-                    containerColor = Color.White.copy(alpha = 0.7f)
+                    containerColor = if (isNightTime) Color(0xFF4A5568).copy(alpha = 0.7f) else Color.White.copy(alpha = 0.7f)
                 ),
                 shape = RoundedCornerShape(12.dp)
             ) {
@@ -193,7 +198,7 @@ fun FilteredCitiesScreen(
                             text = "Bộ lọc đã áp dụng:",
                             fontSize = 16.sp,
                             fontWeight = FontWeight.Bold,
-                            color = Color(0xFF5372dc),
+                            color = if (isNightTime) Color.White else Color(0xFF5372dc),
                             modifier = Modifier.padding(bottom = 8.dp)
                         )
                     }
@@ -201,28 +206,28 @@ fun FilteredCitiesScreen(
                     Text(
                         text = "Quốc gia: ${viewModel.selectedFilterCountry}",
                         fontSize = 14.sp,
-                        color = Color(0xFF5372dc)
+                        color = if (isNightTime) Color.White else Color(0xFF5372dc)
                     )
                     val tempSymbol = if (temperatureUnit == UnitConverter.TemperatureUnit.CELSIUS) "°C" else "°F"
                     Text(
                         text = "Nhiệt độ: ${viewModel.temperatureFilterRange.start.toInt()}$tempSymbol - ${viewModel.temperatureFilterRange.endInclusive.toInt()}$tempSymbol",
                         fontSize = 14.sp,
-                        color = Color(0xFF5372dc)
+                        color = if (isNightTime) Color.White else Color(0xFF5372dc)
                     )
                     Text(
                         text = "Tốc độ gió: ${viewModel.windSpeedFilterRange.start.toInt()} - ${viewModel.windSpeedFilterRange.endInclusive.toInt()} km/h",
                         fontSize = 14.sp,
-                        color = Color(0xFF5372dc)
+                        color = if (isNightTime) Color.White else Color(0xFF5372dc)
                     )
                     Text(
                         text = "Độ ẩm: ${viewModel.humidityFilterRange.start.toInt()} - ${viewModel.humidityFilterRange.endInclusive.toInt()}%",
                         fontSize = 14.sp,
-                        color = Color(0xFF5372dc)
+                        color = if (isNightTime) Color.White else Color(0xFF5372dc)
                     )
                     Text(
                         text = "Trạng thái thời tiết: ${viewModel.weatherStateFilter}",
                         fontSize = 14.sp,
-                        color = Color(0xFF5372dc)
+                        color = if (isNightTime) Color.White else Color(0xFF5372dc)
                     )
                 }
             }
@@ -233,7 +238,11 @@ fun FilteredCitiesScreen(
                     .fillMaxWidth()
                     .padding(bottom = 16.dp),
                 colors = CardDefaults.cardColors(
-                    containerColor = if (displayCities.isNotEmpty()) Color(0xFF4CAF50).copy(alpha = 0.2f) else Color(0xFFE57373).copy(alpha = 0.2f)
+                    containerColor = if (displayCities.isNotEmpty()) {
+                        if (isNightTime) Color(0xFF38A169).copy(alpha = 0.2f) else Color(0xFF4CAF50).copy(alpha = 0.2f)
+                    } else {
+                        if (isNightTime) Color(0xFFFC8181).copy(alpha = 0.2f) else Color(0xFFE57373).copy(alpha = 0.2f)
+                    }
                 ),
                 shape = RoundedCornerShape(12.dp)
             ) {
@@ -255,7 +264,11 @@ fun FilteredCitiesScreen(
                                 id = if (displayCities.isNotEmpty()) android.R.drawable.ic_menu_info_details else android.R.drawable.ic_dialog_alert
                             ),
                             contentDescription = "Kết quả lọc",
-                            tint = if (displayCities.isNotEmpty()) Color(0xFF4CAF50) else Color(0xFFE57373)
+                            tint = if (displayCities.isNotEmpty()) {
+                                if (isNightTime) Color(0xFF38A169) else Color(0xFF4CAF50)
+                            } else {
+                                if (isNightTime) Color(0xFFFC8181) else Color(0xFFE57373)
+                            }
                         )
                         Spacer(modifier = Modifier.width(8.dp))
                         Column {
@@ -263,12 +276,20 @@ fun FilteredCitiesScreen(
                                 text = if (displayCities.isNotEmpty()) "Tìm thấy ${displayCities.size} thành phố phù hợp" else "Không tìm thấy thành phố nào phù hợp",
                                 fontSize = 16.sp,
                                 fontWeight = FontWeight.Bold,
-                                color = if (displayCities.isNotEmpty()) Color(0xFF4CAF50) else Color(0xFFE57373)
+                                color = if (displayCities.isNotEmpty()) {
+                                    if (isNightTime) Color(0xFF38A169) else Color(0xFF4CAF50)
+                                } else {
+                                    if (isNightTime) Color(0xFFFC8181) else Color(0xFFE57373)
+                                }
                             )
                             Text(
                                 text = if (displayCities.isNotEmpty()) "Kết quả lọc theo các tiêu chí đã chọn" else "Hãy thử điều chỉnh bộ lọc",
                                 fontSize = 12.sp,
-                                color = if (displayCities.isNotEmpty()) Color(0xFF4CAF50) else Color(0xFFE57373)
+                                color = if (displayCities.isNotEmpty()) {
+                                    if (isNightTime) Color(0xFF38A169) else Color(0xFF4CAF50)
+                                } else {
+                                    if (isNightTime) Color(0xFFFC8181) else Color(0xFFE57373)
+                                }
                             )
                         }
                     }
@@ -277,7 +298,11 @@ fun FilteredCitiesScreen(
                     Button(
                         onClick = { onBackClick() },
                         colors = ButtonDefaults.buttonColors(
-                            containerColor = if (displayCities.isNotEmpty()) Color(0xFF4CAF50) else Color(0xFFE57373),
+                            containerColor = if (displayCities.isNotEmpty()) {
+                                if (isNightTime) Color(0xFF38A169) else Color(0xFF4CAF50)
+                            } else {
+                                if (isNightTime) Color(0xFFFC8181) else Color(0xFFE57373)
+                            },
                             contentColor = Color.White
                         ),
                         modifier = Modifier
@@ -306,17 +331,17 @@ fun FilteredCitiesScreen(
                         horizontalAlignment = Alignment.CenterHorizontally
                     ) {
                         CircularProgressIndicator(
-                            color = Color(0xFF5372dc)
+                            color = if (isNightTime) Color.White else Color(0xFF5372dc)
                         )
                         Spacer(modifier = Modifier.height(16.dp))
                         Text(
                             text = "Đang tải dữ liệu thời tiết...",
-                            color = Color(0xFF5372dc),
+                            color = if (isNightTime) Color.White else Color(0xFF5372dc),
                             fontSize = 16.sp
                         )
                         Text(
                             text = "Vui lòng đợi trong giây lát",
-                            color = Color(0xFF5372dc).copy(alpha = 0.7f),
+                            color = if (isNightTime) Color.White.copy(alpha = 0.7f) else Color(0xFF5372dc).copy(alpha = 0.7f),
                             fontSize = 14.sp
                         )
                     }
@@ -331,7 +356,7 @@ fun FilteredCitiesScreen(
                         .padding(vertical = 16.dp),
                     contentAlignment = Alignment.Center
                 ) {
-                    CircularProgressIndicator(color = Color(0xFF5372dc))
+                    CircularProgressIndicator(color = if (isNightTime) Color.White else Color(0xFF5372dc))
                 }
             }
             
@@ -348,7 +373,7 @@ fun FilteredCitiesScreen(
                         Icon(
                             painter = painterResource(id = android.R.drawable.ic_menu_info_details),
                             contentDescription = "Info",
-                            tint = Color(0xFF5372dc),
+                            tint = if (isNightTime) Color.White else Color(0xFF5372dc),
                             modifier = Modifier.size(64.dp)
                         )
                         Spacer(modifier = Modifier.height(16.dp))
@@ -358,7 +383,7 @@ fun FilteredCitiesScreen(
                             else
                                 "Không có thành phố nào phù hợp với bộ lọc",
                             fontSize = 16.sp,
-                            color = Color(0xFF5372dc),
+                            color = if (isNightTime) Color.White else Color(0xFF5372dc),
                             textAlign = TextAlign.Center
                         )
                         Spacer(modifier = Modifier.height(8.dp))
@@ -368,7 +393,7 @@ fun FilteredCitiesScreen(
                             else
                                 "Hãy thử điều chỉnh bộ lọc hoặc thêm thành phố mới",
                             fontSize = 14.sp,
-                            color = Color(0xFF5372dc).copy(alpha = 0.8f),
+                            color = if (isNightTime) Color.White.copy(alpha = 0.8f) else Color(0xFF5372dc).copy(alpha = 0.8f),
                             textAlign = TextAlign.Center
                         )
                         
@@ -377,7 +402,7 @@ fun FilteredCitiesScreen(
                             Button(
                                 onClick = { viewModel.updateFilters(weatherState = "Tất cả") },
                                 colors = ButtonDefaults.buttonColors(
-                                    containerColor = Color(0xFF5372dc)
+                                    containerColor = if (isNightTime) Color.White else Color(0xFF5372dc)
                                 )
                             ) {
                                 Text("Xem tất cả trạng thái thời tiết")
@@ -400,21 +425,21 @@ fun FilteredCitiesScreen(
                         Icon(
                             painter = painterResource(id = android.R.drawable.ic_dialog_alert),
                             contentDescription = "Warning",
-                            tint = Color(0xFFFF9800),
+                            tint = if (isNightTime) Color(0xFFFF9800) else Color(0xFFFF9800),
                             modifier = Modifier.size(64.dp)
                         )
                         Spacer(modifier = Modifier.height(16.dp))
                         Text(
                             text = "Không thể tải dữ liệu thời tiết",
                             fontSize = 16.sp,
-                            color = Color(0xFF5372dc),
+                            color = if (isNightTime) Color.White else Color(0xFF5372dc),
                             textAlign = TextAlign.Center
                         )
                         Spacer(modifier = Modifier.height(8.dp))
                         Text(
                             text = "Đã hết thời gian chờ. Vui lòng kiểm tra kết nối mạng và thử lại sau.",
                             fontSize = 14.sp,
-                            color = Color(0xFF5372dc).copy(alpha = 0.8f),
+                            color = if (isNightTime) Color.White.copy(alpha = 0.8f) else Color(0xFF5372dc).copy(alpha = 0.8f),
                             textAlign = TextAlign.Center
                         )
                     }
@@ -432,7 +457,7 @@ fun FilteredCitiesScreen(
                                 .fillMaxWidth()
                                 .padding(vertical = 4.dp),
                             colors = CardDefaults.cardColors(
-                                containerColor = Color.White.copy(alpha = 0.7f)
+                                containerColor = if (isNightTime) Color(0xFF4A5568).copy(alpha = 0.7f) else Color.White.copy(alpha = 0.7f)
                             ),
                             shape = RoundedCornerShape(12.dp)
                         ) {
@@ -456,21 +481,21 @@ fun FilteredCitiesScreen(
                                             text = city.name,
                                             fontSize = 18.sp,
                                             fontWeight = FontWeight.Bold,
-                                            color = Color(0xFF5372dc)
+                                            color = if (isNightTime) Color.White else Color(0xFF5372dc)
                                         )
                                         // Hiển thị quốc gia nếu có
                                         if (!city.country.isNullOrBlank()) {
                                             Text(
                                                 text = city.country,
                                                 fontSize = 14.sp,
-                                                color = Color(0xFF5372dc).copy(alpha = 0.8f),
+                                                color = if (isNightTime) Color.White.copy(alpha = 0.8f) else Color(0xFF5372dc).copy(alpha = 0.8f),
                                                 fontStyle = FontStyle.Italic
                                             )
                                         }
                                         Text(
                                             text = weatherDescription,
                                             fontSize = 14.sp,
-                                            color = Color(0xFF5372dc),
+                                            color = if (isNightTime) Color.White else Color(0xFF5372dc),
                                             style = TextStyle.Default,
                                             onTextLayout = {}
                                         )
@@ -482,17 +507,17 @@ fun FilteredCitiesScreen(
                                         Text(
                                             text = "Nhiệt độ: ${currentTemp}°C",
                                             fontSize = 12.sp,
-                                            color = Color(0xFF5372dc).copy(alpha = 0.8f)
+                                            color = if (isNightTime) Color.White.copy(alpha = 0.8f) else Color(0xFF5372dc).copy(alpha = 0.8f)
                                         )
                                         Text(
                                             text = "Độ ẩm: ${currentHumidity}%",
                                             fontSize = 12.sp,
-                                            color = Color(0xFF5372dc).copy(alpha = 0.8f)
+                                            color = if (isNightTime) Color.White.copy(alpha = 0.8f) else Color(0xFF5372dc).copy(alpha = 0.8f)
                                         )
                                         Text(
                                             text = "Tốc độ gió: ${UnitConverter.convertWindSpeed(currentWindSpeed.toDouble(), windSpeedUnit)}",
                                             fontSize = 12.sp,
-                                            color = Color(0xFF5372dc).copy(alpha = 0.8f)
+                                            color = if (isNightTime) Color.White.copy(alpha = 0.8f) else Color(0xFF5372dc).copy(alpha = 0.8f)
                                         )
                                         
                                         // Thêm các thông số khác từ weatherData nếu có
@@ -500,7 +525,7 @@ fun FilteredCitiesScreen(
                                             Text(
                                                 text = "Chỉ số AQI: $aqi (${getAqiDescription(aqi)})",
                                                 fontSize = 12.sp,
-                                                color = Color(0xFF5372dc).copy(alpha = 0.8f)
+                                                color = if (isNightTime) Color.White.copy(alpha = 0.8f) else Color(0xFF5372dc).copy(alpha = 0.8f)
                                             )
                                         }
 
@@ -508,7 +533,7 @@ fun FilteredCitiesScreen(
                                             Text(
                                                 text = "Chỉ số UV: ${uvIndex.toInt()} (${getUvDescription(uvIndex.toInt())})",
                                                 fontSize = 12.sp,
-                                                color = Color(0xFF5372dc).copy(alpha = 0.8f)
+                                                color = if (isNightTime) Color.White.copy(alpha = 0.8f) else Color(0xFF5372dc).copy(alpha = 0.8f)
                                             )
                                         }
                                     }
@@ -519,7 +544,7 @@ fun FilteredCitiesScreen(
                                         Icon(
                                             painter = painterResource(id = weatherIcon),
                                             contentDescription = weatherDescription,
-                                            tint = Color(0xFF5372dc),
+                                            tint = if (isNightTime) Color.White else Color(0xFF5372dc),
                                             modifier = Modifier.size(40.dp)
                                         )
                                     }
@@ -538,26 +563,26 @@ fun FilteredCitiesScreen(
                                             text = city.name,
                                             fontSize = 18.sp,
                                             fontWeight = FontWeight.Bold,
-                                            color = Color(0xFF5372dc)
+                                            color = if (isNightTime) Color.White else Color(0xFF5372dc)
                                         )
                                         // Hiển thị quốc gia nếu có
                                         if (!city.country.isNullOrBlank()) {
                                             Text(
                                                 text = city.country,
                                                 fontSize = 14.sp,
-                                                color = Color(0xFF5372dc).copy(alpha = 0.8f),
+                                                color = if (isNightTime) Color.White.copy(alpha = 0.8f) else Color(0xFF5372dc).copy(alpha = 0.8f),
                                                 fontStyle = FontStyle.Italic
                                             )
                                         }
                                         Text(
                                             text = "Đang tải dữ liệu...",
                                             fontSize = 14.sp,
-                                            color = Color(0xFF5372dc).copy(alpha = 0.7f)
+                                            color = if (isNightTime) Color.White.copy(alpha = 0.7f) else Color(0xFF5372dc).copy(alpha = 0.7f)
                                         )
                                     }
                                     CircularProgressIndicator(
                                         modifier = Modifier.size(24.dp),
-                                        color = Color(0xFF5372dc),
+                                        color = if (isNightTime) Color.White else Color(0xFF5372dc),
                                         strokeWidth = 2.dp
                                     )
                                 }
@@ -727,4 +752,139 @@ fun doesWeatherCodeMatchFilter(weatherCode: Int, weatherFilter: String): Boolean
     
     Log.d("FilteredCitiesScreen", "Kiểm tra lọc mã thời tiết: $weatherCode với bộ lọc '$weatherFilter': $result")
     return result
+}
+
+@Preview(showBackground = true)
+@Composable
+fun FilteredCitiesScreenPreview() {
+    // Mock data for preview
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(
+                brush = Brush.linearGradient(
+                    colors = listOf(Color(0xFF87CEEB), Color(0xFF98FB98))
+                )
+            )
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(16.dp)
+        ) {
+            // Header with back button
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(bottom = 16.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                IconButton(onClick = {}) {
+                    Icon(
+                        imageVector = Icons.Default.ArrowBack,
+                        contentDescription = "Quay lại",
+                        tint = Color(0xFF5372dc)
+                    )
+                }
+                Text(
+                    text = "Kết quả tìm kiếm",
+                    fontSize = 20.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Color(0xFF5372dc),
+                    modifier = Modifier.padding(start = 8.dp)
+                )
+            }
+            
+            // Sample filtered city card
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 4.dp),
+                colors = CardDefaults.cardColors(
+                    containerColor = Color.White.copy(alpha = 0.9f)
+                ),
+                shape = RoundedCornerShape(12.dp)
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column {
+                        Text(
+                            text = "Hà Nội",
+                            fontSize = 18.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = Color(0xFF5372dc)
+                        )
+                        Text(
+                            text = "Việt Nam",
+                            fontSize = 14.sp,
+                            color = Color(0xFF5372dc).copy(alpha = 0.8f),
+                            fontStyle = FontStyle.Italic
+                        )
+                        Text(
+                            text = "25°C • Nắng nhẹ",
+                            fontSize = 14.sp,
+                            color = Color(0xFF5372dc).copy(alpha = 0.7f)
+                        )
+                    }
+                    Image(
+                        painter = painterResource(id = R.drawable.sunny),
+                        contentDescription = "Weather icon",
+                        modifier = Modifier.size(40.dp)
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Preview(showBackground = true)
+@Composable
+fun FilteredCityCardPreview() {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(8.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = Color.White.copy(alpha = 0.9f)
+        ),
+        shape = RoundedCornerShape(12.dp)
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column {
+                Text(
+                    text = "TP. Hồ Chí Minh",
+                    fontSize = 18.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Color(0xFF5372dc)
+                )
+                Text(
+                    text = "Việt Nam",
+                    fontSize = 14.sp,
+                    color = Color(0xFF5372dc).copy(alpha = 0.8f),
+                    fontStyle = FontStyle.Italic
+                )
+                Text(
+                    text = "28°C • Nhiều mây",
+                    fontSize = 14.sp,
+                    color = Color(0xFF5372dc).copy(alpha = 0.7f)
+                )
+            }
+            Image(
+                painter = painterResource(id = R.drawable.cloudy),
+                contentDescription = "Weather icon",
+                modifier = Modifier.size(40.dp)
+            )
+        }
+    }
 } 

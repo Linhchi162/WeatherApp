@@ -1153,7 +1153,7 @@ class MainActivity : ComponentActivity() {
                 val minTemp = forecast.temperature_2m_min.toInt()
                 val precipitation = forecast.precipitation_probability_max.toInt()
                 val weatherCode = forecast.weather_code
-                val weatherDescription = WeatherUtils.getWeatherDescription(weatherCode)
+                val weatherDescription = WeatherUtils.getWeatherDescription(weatherCode, cityName)
                 val weatherEmoji = WeatherUtils.getWeatherEmoji(weatherCode)
                 val weatherIcon = WeatherUtils.getWeatherIcon(weatherCode)
 

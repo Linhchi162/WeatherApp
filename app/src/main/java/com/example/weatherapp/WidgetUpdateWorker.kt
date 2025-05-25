@@ -21,7 +21,7 @@ class WidgetUpdateWorker(
             if (allWeatherData.isNotEmpty()) {
                 Log.d("WidgetUpdateWorker", "Weather data found for city: ${allWeatherData.first().cityName}")
                 HourlyWeatherWidget().updateAll(applicationContext)
-                CurrentWeatherWidget().updateAll(applicationContext)
+                WeatherWidget().updateAll(applicationContext)
                 Log.d("WidgetUpdateWorker", "Widgets updated successfully")
                 Result.success()
             } else {

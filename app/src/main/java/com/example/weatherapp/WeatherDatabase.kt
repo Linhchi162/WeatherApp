@@ -7,7 +7,7 @@ import androidx.room.RoomDatabase
 import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
 
-@Database(entities = [WeatherData::class, WeatherDetail::class, WeatherDailyDetail::class], version = 3, exportSchema = false)
+@Database(entities = [WeatherData::class, WeatherDetail::class, WeatherDailyDetail::class], version = 4, exportSchema = false)
 abstract class WeatherDatabase : RoomDatabase() {
     abstract fun weatherDao(): WeatherDao
 

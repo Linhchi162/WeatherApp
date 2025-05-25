@@ -32,6 +32,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.Dispatchers
+import java.time.LocalTime
 
 
 @Composable
@@ -208,6 +209,27 @@ fun SearchScreen(
         }
     }
 
+    // Dark mode detection based on time
+    val currentTime = LocalTime.now()
+    val isDarkMode = currentTime.hour < 6 || currentTime.hour >= 18
+    
+    // Colors based on theme
+    val backgroundColor = if (isDarkMode) {
+        Brush.verticalGradient(
+            colors = listOf(Color(0xFF1A202C), Color(0xFF2D3748))
+        )
+    } else {
+        Brush.verticalGradient(
+            colors = listOf(Color(0xFFcbdfff), Color(0xFFfcdbf6))
+        )
+    }
+    
+    val textColor = if (isDarkMode) Color.White else Color(0xFF5372dc)
+    val secondaryTextColor = if (isDarkMode) Color.White.copy(alpha = 0.7f) else Color(0xFF5372dc)
+    val iconTint = if (isDarkMode) Color.White else Color(0xFF5372dc)
+    val cardBackgroundColor = if (isDarkMode) Color(0xFF2D3748) else Color.White
+    val inputBackgroundColor = if (isDarkMode) Color(0xFF1A202C) else Color.White
+
     // Hiển thị màn hình loading nếu đang lọc
     if (isLoading) {
         Dialog(onDismissRequest = { /* Không cho dismiss khi đang loading */ }) {
@@ -236,303 +258,288 @@ fun SearchScreen(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .fillMaxHeight(fraction = 0.8f)
+                .fillMaxHeight(fraction = 0.85f)
                 .background(
-                    brush = Brush.verticalGradient(
-                        colors = listOf(Color(0xFFcbdfff), Color(0xFFfcdbf6))
-                    ),
-                    shape = RoundedCornerShape(16.dp)
+                    brush = backgroundColor,
+                    shape = RoundedCornerShape(20.dp)
                 )
-                .padding(16.dp)
+                .padding(20.dp)
         ) {
             // Tiêu đề và nút quay lại
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(bottom = 16.dp),
+                    .padding(bottom = 20.dp),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                IconButton(onClick = onBackClick) {
+                IconButton(
+                    onClick = onBackClick,
+                    modifier = Modifier.size(40.dp)
+                ) {
                     Icon(
-                        painter = painterResource(id = android.R.drawable.ic_menu_close_clear_cancel),
+                        painter = painterResource(id = R.drawable.ic_back),
                         contentDescription = "Back",
-                        tint = Color(0xFF5372dc)
+                        tint = iconTint,
+                        modifier = Modifier.size(24.dp)
                     )
                 }
                 Text(
                     text = "Lọc theo điều kiện thời tiết",
-                    fontSize = 20.sp,
+                    fontSize = 18.sp,
                     fontWeight = FontWeight.Bold,
-                    color = Color(0xFF5372dc)
+                    color = textColor
                 )
-
-                Spacer(modifier = Modifier.width(48.dp))
+                Spacer(modifier = Modifier.width(40.dp))
             }
 
-            // Thanh tìm kiếm quốc gia - sử dụng API độc lập
-            Text(
-                text = "Quốc gia",
-                fontSize = 16.sp,
-                color = Color(0xFF5372dc),
-                modifier = Modifier.padding(bottom = 8.dp)
-            )
-            
-            OutlinedTextField(
-                value = if (filterCountryQuery.isNotEmpty()) filterCountryQuery else selectedCountry,
-                onValueChange = {
-                    selectedCountry = ""
-                    filterCountryQuery = it
-                    searchCountry(it) // Gọi hàm tìm kiếm quốc gia độc lập
-                },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(bottom = 8.dp),
-                placeholder = { Text("Nhập tên quốc gia...") },
-                leadingIcon = {
-                    if (selectedCountry.isNotEmpty() && filterCountryQuery.isEmpty()) {
-                        // Hiển thị badge khi đã chọn quốc gia
-                        Box(
-                            modifier = Modifier
-                                .background(
-                                    color = Color(0xFF5372dc).copy(alpha = 0.2f),
-                                    shape = RoundedCornerShape(16.dp)
-                                )
-                                .padding(horizontal = 8.dp, vertical = 4.dp)
-                        ) {
-                            Text(
-                                text = selectedCountry,
-                                fontSize = 12.sp,
-                                color = Color(0xFF5372dc),
-                                fontWeight = FontWeight.Bold
-                            )
-                        }
-                    } else {
-                        Icon(
-                            painter = painterResource(id = android.R.drawable.ic_menu_search),
-                            contentDescription = "Search",
-                            tint = Color(0xFF5372dc)
+            // Content trong ScrollableColumn để tránh overflow
+            LazyColumn(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                item {
+                    // Thanh tìm kiếm quốc gia
+                    Column {
+                        Text(
+                            text = "Quốc gia",
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.Medium,
+                            color = textColor,
+                            modifier = Modifier.padding(bottom = 8.dp)
+                        )
+                        
+                        OutlinedTextField(
+                            value = if (filterCountryQuery.isNotEmpty()) filterCountryQuery else selectedCountry,
+                            onValueChange = {
+                                selectedCountry = ""
+                                filterCountryQuery = it
+                                searchCountry(it)
+                            },
+                            modifier = Modifier.fillMaxWidth(),
+                            placeholder = { 
+                                        Text(
+                                    "Nhập tên quốc gia...", 
+                                    fontSize = 14.sp,
+                                    color = secondaryTextColor
+                                ) 
+                            },
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedBorderColor = textColor,
+                                unfocusedBorderColor = secondaryTextColor.copy(alpha = 0.5f),
+                                focusedTextColor = textColor,
+                                unfocusedTextColor = textColor,
+                                cursorColor = textColor,
+                                focusedContainerColor = inputBackgroundColor,
+                                unfocusedContainerColor = inputBackgroundColor
+                            ),
+                            shape = RoundedCornerShape(12.dp)
                         )
                     }
-                },
-                trailingIcon = {
-                    if (filterCountryQuery.isNotEmpty() || selectedCountry.isNotEmpty()) {
-                        IconButton(onClick = {
-                            filterCountryQuery = ""
-                            selectedCountry = ""
-                            countrySuggestions = emptyList()
-                        }) {
-                            Icon(
-                                painter = painterResource(id = android.R.drawable.ic_menu_close_clear_cancel),
-                                contentDescription = "Clear",
-                                tint = Color(0xFF5372dc)
-                            )
-                        }
-                    }
-                },
-                colors = OutlinedTextFieldDefaults.colors(
-                    focusedBorderColor = Color(0xFF5372dc),
-                    unfocusedBorderColor = Color.Gray,
-                    focusedLabelColor = Color(0xFF5372dc),
-                    cursorColor = Color(0xFF5372dc)
-                ),
-                shape = RoundedCornerShape(15.dp)
-            )
-            
-            // Hiển thị danh sách gợi ý quốc gia
-            val showCountrySuggest = filterCountryQuery.isNotEmpty()
-            Box(Modifier.zIndex(10f)) {
-                if (showCountrySuggest) {
-                    Card(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .heightIn(max = 250.dp)
-                            .background(Color.White),
-                        shape = RoundedCornerShape(12.dp),
-                        elevation = CardDefaults.cardElevation(8.dp)
-                    ) {
-                        val scrollState = rememberScrollState()
-                        Column(
+                }
+
+                // Country suggestions (if any)
+                item {
+                    val showCountrySuggest = filterCountryQuery.isNotEmpty()
+                    if (showCountrySuggest) {
+                        Card(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .heightIn(max = 250.dp)
-                                .verticalScroll(scrollState)
+                                .heightIn(max = 200.dp),
+                            shape = RoundedCornerShape(12.dp),
+                            elevation = CardDefaults.cardElevation(6.dp),
+                            colors = CardDefaults.cardColors(containerColor = cardBackgroundColor)
                         ) {
-                            if (isSearchingCountry) {
-                                Box(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .padding(16.dp),
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    CircularProgressIndicator(color = Color(0xFF5372dc))
-                                }
-                            } else if (countrySearchError != null && localFilteredCountries.isEmpty()) {
-                                Text(
-                                    text = countrySearchError ?: "Lỗi không xác định",
-                                    color = Color.Red,
-                                    modifier = Modifier.padding(16.dp)
-                                )
-                            } else if (countrySuggestions.isEmpty() && filterCountryQuery.length >= 1) {
-                                Text(
-                                    text = "Không tìm thấy quốc gia phù hợp",
-                                    color = Color.Gray,
-                                    modifier = Modifier.padding(16.dp)
-                                )
-                            } else {
-                                // Hiển thị danh sách local nếu không có kết quả API
-                                val displayList = if (countrySuggestions.isEmpty()) localFilteredCountries else countrySuggestions
-                                if (displayList.isEmpty() && filterCountryQuery.isNotEmpty()) {
-                                    Text(
-                                        text = "Không tìm thấy quốc gia phù hợp",
-                                        color = Color.Gray,
-                                        modifier = Modifier.padding(16.dp)
-                                    )
-                                } else {
-                                    displayList.forEach { suggestion ->
-                                        ListItem(
-                                            headlineContent = { Text(suggestion.formattedName, color = Color(0xFF5372dc)) },
-                                            modifier = Modifier.clickable {
-                                                selectedCountry = suggestion.formattedName
-                                                filterCountryQuery = ""
-                                                countrySuggestions = emptyList()
-                                            }
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .heightIn(max = 200.dp)
+                                    .verticalScroll(rememberScrollState())
+                            ) {
+                                if (isSearchingCountry) {
+                                    Box(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(16.dp),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        CircularProgressIndicator(
+                                            color = textColor,
+                                            modifier = Modifier.size(20.dp),
+                                            strokeWidth = 2.dp
                                         )
+                                    }
+                                } else {
+                                    val displayList = if (countrySuggestions.isEmpty()) localFilteredCountries else countrySuggestions
+                                    if (displayList.isEmpty()) {
+                                        Text(
+                                            text = "Không tìm thấy quốc gia phù hợp",
+                                            color = secondaryTextColor,
+                                            fontSize = 14.sp,
+                                            modifier = Modifier.padding(16.dp)
+                                        )
+                                    } else {
+                                        displayList.forEach { suggestion ->
+                                            ListItem(
+                                                headlineContent = { 
+                                                    Text(
+                                                        text = suggestion.formattedName, 
+                                                        color = textColor,
+                                                        fontSize = 14.sp
+                                                    ) 
+                                                },
+                                                modifier = Modifier
+                                                    .clickable {
+                                                        selectedCountry = suggestion.formattedName
+                                                        filterCountryQuery = ""
+                                                        countrySuggestions = emptyList()
+                                                    }
+                                                    .padding(horizontal = 8.dp)
+                                            )
+                                        }
                                     }
                                 }
                             }
                         }
                     }
                 }
-            }
 
-            // Bộ lọc nhiệt độ
-            val tempSymbol = if (temperatureUnit == UnitConverter.TemperatureUnit.CELSIUS) "°C" else "°F"
-            Text(
-                text = "Nhiệt độ (${temperatureRange.start.toInt()}$tempSymbol - ${temperatureRange.endInclusive.toInt()}$tempSymbol)",
-                fontSize = 16.sp,
-                color = Color(0xFF5372dc),
-                modifier = Modifier.padding(bottom = 8.dp)
-            )
-            RangeSlider(
-                value = temperatureRange,
-                onValueChange = { temperatureRange = it },
-
-                valueRange = -20f..50f,
-
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(bottom = 16.dp),
-                colors = SliderDefaults.colors(
-                    thumbColor = Color(0xFF5372dc),
-                    activeTrackColor = Color(0xFF5372dc),
-                    inactiveTrackColor = Color.Gray
-                )
-            )
-
-            // Bộ lọc tốc độ gió
-            Text(
-                text = "Tốc độ gió (${windSpeedRange.start.toInt()} - ${windSpeedRange.endInclusive.toInt()} km/h)",
-                fontSize = 16.sp,
-                color = Color(0xFF5372dc),
-                modifier = Modifier.padding(bottom = 8.dp)
-            )
-            RangeSlider(
-                value = windSpeedRange,
-                onValueChange = { windSpeedRange = it },
-
-                valueRange = 0f..100f,
-
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(bottom = 16.dp),
-                colors = SliderDefaults.colors(
-                    thumbColor = Color(0xFF5372dc),
-                    activeTrackColor = Color(0xFF5372dc),
-                    inactiveTrackColor = Color.Gray
-                )
-            )
-
-            // Bộ lọc độ ẩm
-            Text(
-                text = "Độ ẩm (${humidityRange.start.toInt()}% - ${humidityRange.endInclusive.toInt()}%)",
-                fontSize = 16.sp,
-                color = Color(0xFF5372dc),
-                modifier = Modifier.padding(bottom = 8.dp)
-            )
-            RangeSlider(
-                value = humidityRange,
-                onValueChange = { humidityRange = it },
-                valueRange = 0f..100f,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(bottom = 16.dp),
-                colors = SliderDefaults.colors(
-                    thumbColor = Color(0xFF5372dc),
-                    activeTrackColor = Color(0xFF5372dc),
-                    inactiveTrackColor = Color.Gray
-                )
-            )
-
-            // Bộ lọc trạng thái thời tiết
-            Text(
-                text = "Trạng thái thời tiết",
-                fontSize = 16.sp,
-                color = Color(0xFF5372dc),
-                modifier = Modifier.padding(bottom = 8.dp)
-            )
-            Box {
-                OutlinedTextField(
-                    value = weatherState,
-                    onValueChange = {},
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(bottom = 16.dp),
-                    readOnly = true,
-                    trailingIcon = {
-                        IconButton(onClick = { showWeatherDropdown = true }) {
-                            Icon(
-                                painter = painterResource(id = android.R.drawable.ic_menu_sort_by_size),
-                                contentDescription = "Dropdown",
-                                tint = Color(0xFF5372dc)
-                            )
-                        }
-                    },
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedBorderColor = Color(0xFF5372dc),
-                        unfocusedBorderColor = Color.Gray,
-                        focusedLabelColor = Color(0xFF5372dc),
-                        cursorColor = Color(0xFF5372dc)
-                    ),
-                    shape = RoundedCornerShape(15.dp)
-                )
-                DropdownMenu(
-                    expanded = showWeatherDropdown,
-                    onDismissRequest = { showWeatherDropdown = false },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .background(Color.White)
-                ) {
-                    weatherStates.forEach { state ->
-                        DropdownMenuItem(
-                            text = { Text(state, color = Color(0xFF5372dc)) },
-                            onClick = {
-                                weatherState = state
-                                showWeatherDropdown = false
-                            }
+                item {
+                    // Bộ lọc nhiệt độ
+                    Column {
+                        val tempSymbol = if (temperatureUnit == UnitConverter.TemperatureUnit.CELSIUS) "°C" else "°F"
+                        Text(
+                            text = "Nhiệt độ (${temperatureRange.start.toInt()}$tempSymbol - ${temperatureRange.endInclusive.toInt()}$tempSymbol)",
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.Medium,
+                            color = textColor,
+                            modifier = Modifier.padding(bottom = 8.dp)
                         )
+                        RangeSlider(
+                            value = temperatureRange,
+                            onValueChange = { temperatureRange = it },
+                            valueRange = -20f..50f,
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = SliderDefaults.colors(
+                                thumbColor = textColor,
+                                activeTrackColor = textColor,
+                                inactiveTrackColor = secondaryTextColor.copy(alpha = 0.3f)
+                            )
+                        )
+                    }
+                }
+
+                item {
+                    // Bộ lọc tốc độ gió
+                    Column {
+                        Text(
+                            text = "Tốc độ gió (${windSpeedRange.start.toInt()} - ${windSpeedRange.endInclusive.toInt()} km/h)",
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.Medium,
+                            color = textColor,
+                            modifier = Modifier.padding(bottom = 8.dp)
+                        )
+                        RangeSlider(
+                            value = windSpeedRange,
+                            onValueChange = { windSpeedRange = it },
+                            valueRange = 0f..100f,
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = SliderDefaults.colors(
+                                thumbColor = textColor,
+                                activeTrackColor = textColor,
+                                inactiveTrackColor = secondaryTextColor.copy(alpha = 0.3f)
+                            )
+                        )
+                    }
+                }
+
+                item {
+                    // Bộ lọc độ ẩm
+                    Column {
+                        Text(
+                            text = "Độ ẩm (${humidityRange.start.toInt()}% - ${humidityRange.endInclusive.toInt()}%)",
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.Medium,
+                            color = textColor,
+                            modifier = Modifier.padding(bottom = 8.dp)
+                        )
+                        RangeSlider(
+                            value = humidityRange,
+                            onValueChange = { humidityRange = it },
+                            valueRange = 0f..100f,
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = SliderDefaults.colors(
+                                thumbColor = textColor,
+                                activeTrackColor = textColor,
+                                inactiveTrackColor = secondaryTextColor.copy(alpha = 0.3f)
+                            )
+                        )
+                    }
+                }
+
+                item {
+                    // Bộ lọc trạng thái thời tiết
+                    Column {
+                        Text(
+                            text = "Trạng thái thời tiết",
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.Medium,
+                            color = textColor,
+                            modifier = Modifier.padding(bottom = 8.dp)
+                        )
+                        Box {
+                            OutlinedTextField(
+                                value = weatherState,
+                                onValueChange = {},
+                                modifier = Modifier.fillMaxWidth(),
+                                readOnly = true,
+                                placeholder = { Text("Tất cả", fontSize = 14.sp) },
+                                trailingIcon = {
+                                    IconButton(onClick = { showWeatherDropdown = true }) {
+                                        Icon(
+                                            painter = painterResource(id = android.R.drawable.ic_menu_sort_by_size),
+                                            contentDescription = "Dropdown",
+                                            tint = textColor,
+                                            modifier = Modifier.size(20.dp)
+                                        )
+                                    }
+                                },
+                                colors = OutlinedTextFieldDefaults.colors(
+                                    focusedBorderColor = textColor,
+                                    unfocusedBorderColor = secondaryTextColor.copy(alpha = 0.5f),
+                                    focusedLabelColor = textColor,
+                                    cursorColor = textColor
+                                ),
+                                shape = RoundedCornerShape(12.dp),
+                                textStyle = LocalTextStyle.current.copy(fontSize = 14.sp)
+                            )
+                            DropdownMenu(
+                                expanded = showWeatherDropdown,
+                                onDismissRequest = { showWeatherDropdown = false },
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .background(cardBackgroundColor, RoundedCornerShape(8.dp))
+                            ) {
+                                weatherStates.forEach { state ->
+                                    DropdownMenuItem(
+                                        text = { Text(state, color = textColor, fontSize = 14.sp) },
+                                        onClick = {
+                                            weatherState = state
+                                            showWeatherDropdown = false
+                                        }
+                                    )
+                                }
+                            }
+                        }
                     }
                 }
             }
 
-            // Nút áp dụng bộ lọc
+            // Nút áp dụng bộ lọc - cố định ở dưới
+            Spacer(modifier = Modifier.height(16.dp))
             Button(
-
                 onClick = {
-                    // Hiện loading screen
                     isLoading = true
-                    
-                    // Cập nhật các giá trị lọc vào ViewModel
                     viewModel.updateFilters(
                         country = selectedCountry,
                         temperatureRange = temperatureRange,
@@ -540,30 +547,43 @@ fun SearchScreen(
                         humidityRange = humidityRange,
                         weatherState = weatherState
                     )
-                    
-                    // Áp dụng bộ lọc và đóng dialog khi hoàn thành
                     viewModel.viewModelScope.launch {
                         viewModel.applyFilters()
-                        // Tăng thời gian delay để đảm bảo lấy đủ dữ liệu từ API và fetch thời tiết
-                        delay(3000) // 3 giây
+                        delay(1000)
                         isLoading = false
-                        onDismiss() // Đóng dialog khi hoàn thành
-                        onShowFilteredResults() // Hiển thị màn hình kết quả lọc
+                        onDismiss()
+                        onShowFilteredResults()
                     }
                 },
-
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(50.dp),
+                    .height(48.dp),
                 colors = ButtonDefaults.buttonColors(
-                    containerColor = Color(0xFF5372dc),
+                    containerColor = if (isDarkMode) Color(0xFF4A5568) else Color(0xFF5372dc),
                     contentColor = Color.White
                 ),
-                shape = RoundedCornerShape(15.dp)
+                shape = RoundedCornerShape(12.dp)
             ) {
-                Text("Áp dụng bộ lọc", fontSize = 16.sp)
+                if (isLoading) {
+                    CircularProgressIndicator(
+                        color = Color.White,
+                        modifier = Modifier.size(24.dp),
+                        strokeWidth = 2.dp
+                    )
+                } else {
+                Text("Áp dụng bộ lọc", fontSize = 15.sp, fontWeight = FontWeight.Medium)
+                }
             }
         }
+    }
+}
+
+@Preview(showBackground = true)
+@Composable
+fun SearchScreenPreview() {
+    // Sử dụng các giá trị mặc định/mock cho preview
+    Box(modifier = Modifier.fillMaxSize().background(Color.LightGray)) {
+        Text("Search Screen Preview", modifier = Modifier.align(Alignment.Center))
     }
 }
 

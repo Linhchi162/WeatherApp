@@ -92,10 +92,19 @@ class WeatherUpdateWorker(
                             temperature_2m_max = response.daily.temperature_2m_max[index],
                             temperature_2m_min = response.daily.temperature_2m_min[index],
                             weather_code = response.daily.weathercode[index],
-                            precipitation_probability_max = response.daily.precipitation_probability_max[index]
+                            precipitation_probability_max = response.daily.precipitation_probability_max[index],
+                            sunrise = response.daily.sunrise[index],
+                            sunset = response.daily.sunset[index]
                         )
                     }
                     weatherDao.insertWeatherDailyDetails(dailyDetails)
+
+                    // Log sunrise and sunset times
+                    response.daily.sunrise.forEachIndexed { index, sunrise ->
+                        val sunset = response.daily.sunset[index]
+                        Log.d("WeatherUpdateWorker", "Sunrise for ${city.name} on ${response.daily.time[index]}: $sunrise")
+                        Log.d("WeatherUpdateWorker", "Sunset for ${city.name} on ${response.daily.time[index]}: $sunset")
+                    }
 
                     Log.d("WeatherUpdateWorker", "Lưu ${hourlyDetails.size} WeatherDetail thành công cho ${city.name}")
                     Log.d("WeatherUpdateWorker", "Lưu ${dailyDetails.size} WeatherDailyDetail thành công cho ${city.name}")

@@ -23,5 +23,7 @@ data class WeatherDailyDetail(
     val temperature_2m_max: Double,
     val temperature_2m_min: Double,
     val precipitation_probability_max: Double,
-    val weather_code: Int
+    val weather_code: Int,
+    val sunrise: String,
+    val sunset: String
 )

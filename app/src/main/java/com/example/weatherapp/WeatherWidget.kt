@@ -2,35 +2,51 @@ package com.example.weatherapp
 
 import android.content.Context
 import android.content.Intent
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.produceState
+import android.util.Log
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.glance.GlanceId
-import androidx.glance.GlanceModifier
-import androidx.glance.Image
-import androidx.glance.ImageProvider
+import androidx.glance.*
 import androidx.glance.action.clickable
 import androidx.glance.appwidget.GlanceAppWidget
 import androidx.glance.appwidget.provideContent
-import androidx.glance.background
-import androidx.glance.layout.Alignment
+import androidx.glance.layout.Alignment as GlanceAlignment
 import androidx.glance.layout.Box
 import androidx.glance.layout.Column
 import androidx.glance.layout.Row
 import androidx.glance.layout.fillMaxSize
 import androidx.glance.layout.padding
 import androidx.glance.layout.size
-import androidx.glance.text.FontWeight
+import androidx.glance.text.FontWeight as GlanceFontWeight
 import androidx.glance.text.Text
 import androidx.glance.text.TextStyle
-import android.util.Log
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.time.Instant
 import java.time.LocalDateTime
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
+
+class WeatherWidget : GlanceAppWidget() {
+    override suspend fun provideGlance(context: Context, id: GlanceId) {
+        provideContent {
+            WeatherWidgetContent(context)
+        }
+    }
+}
 
 class HourlyWeatherWidget : GlanceAppWidget() {
     override suspend fun provideGlance(context: Context, id: GlanceId) {
@@ -40,10 +56,130 @@ class HourlyWeatherWidget : GlanceAppWidget() {
     }
 }
 
-class CurrentWeatherWidget : GlanceAppWidget() {
-    override suspend fun provideGlance(context: Context, id: GlanceId) {
-        provideContent {
-            CurrentWeatherWidgetContent(context)
+@Composable
+private fun WeatherWidgetContent(context: Context) {
+    val weatherData = produceState<WidgetWeatherData?>(initialValue = null) {
+        value = getWeatherData(context)
+    }
+    val temperatureUnit = getTemperatureUnit(context)
+    val backgroundRes = getBackgroundResource()
+
+    Box(
+        modifier = GlanceModifier
+            .fillMaxSize()
+            .background(ImageProvider(backgroundRes))
+            .clickable {
+                val intent = Intent(context, MainActivity::class.java)
+                intent.flags = Intent.FLAG_ACTIVITY_NEW_TASK
+                context.startActivity(intent)
+            }
+            .padding(12.dp),
+        contentAlignment = GlanceAlignment.Center
+    ) {
+        if (weatherData.value == null) {
+            Box(
+                modifier = GlanceModifier
+                    .fillMaxSize()
+                    .padding(16.dp),
+                contentAlignment = GlanceAlignment.Center
+            ) {
+                Text(
+                    text = "Đang tải...",
+                    style = TextStyle(
+                        fontSize = 14.sp,
+                        fontWeight = GlanceFontWeight.Medium,
+                        color = androidx.glance.color.ColorProvider(
+                            day = androidx.compose.ui.graphics.Color.White,
+                            night = androidx.compose.ui.graphics.Color.White
+                        )
+                    )
+                )
+            }
+        } else {
+                Column(
+                horizontalAlignment = GlanceAlignment.CenterHorizontally,
+                    modifier = GlanceModifier.fillMaxSize()
+                ) {
+                // City name
+                    Text(
+                        text = weatherData.value!!.cityName,
+                        style = TextStyle(
+                            fontSize = 16.sp,
+                        fontWeight = GlanceFontWeight.Bold,
+                            color = androidx.glance.color.ColorProvider(
+                            day = androidx.compose.ui.graphics.Color.White,
+                            night = androidx.compose.ui.graphics.Color.White
+                            )
+                        ),
+                    modifier = GlanceModifier.padding(bottom = 8.dp)
+                    )
+
+                // Temperature and weather icon
+                    Row(
+                    verticalAlignment = GlanceAlignment.CenterVertically,
+                        modifier = GlanceModifier.padding(bottom = 8.dp)
+                    ) {
+                        Text(
+                            text = "${UnitConverter.convertTemperature(weatherData.value!!.currentTemperature, temperatureUnit).toInt()}°",
+                            style = TextStyle(
+                            fontSize = 32.sp,
+                            fontWeight = GlanceFontWeight.Bold,
+                                color = androidx.glance.color.ColorProvider(
+                                day = androidx.compose.ui.graphics.Color.White,
+                                night = androidx.compose.ui.graphics.Color.White
+                            )
+                            )
+                        )
+                        Image(
+                        provider = ImageProvider(getWeatherIconResource(weatherData.value!!.weatherCode)),
+                            contentDescription = "Weather Icon",
+                        modifier = GlanceModifier.size(40.dp).padding(start = 8.dp)
+                        )
+                    }
+
+                // High/Low temperatures
+                Row(
+                    horizontalAlignment = GlanceAlignment.CenterHorizontally
+                ) {
+                    Text(
+                        text = "H:${UnitConverter.convertTemperature(weatherData.value!!.temperatureMax, temperatureUnit).toInt()}°",
+                        style = TextStyle(
+                            fontSize = 14.sp,
+                            fontWeight = GlanceFontWeight.Medium,
+                            color = androidx.glance.color.ColorProvider(
+                                day = androidx.compose.ui.graphics.Color.White,
+                                night = androidx.compose.ui.graphics.Color.White
+                            )
+                        )
+                    )
+                                Text(
+                        text = " L:${UnitConverter.convertTemperature(weatherData.value!!.temperatureMin, temperatureUnit).toInt()}°",
+                                    style = TextStyle(
+                            fontSize = 14.sp,
+                            fontWeight = GlanceFontWeight.Medium,
+                                        color = androidx.glance.color.ColorProvider(
+                                day = androidx.compose.ui.graphics.Color.White,
+                                night = androidx.compose.ui.graphics.Color.White
+                                        )
+                                    )
+                                )
+                }
+
+                // Last updated
+                weatherData.value!!.lastUpdated?.let { timestamp ->
+                                Text(
+                        text = formatWidgetTimestamp(timestamp),
+                                    style = TextStyle(
+                            fontSize = 10.sp,
+                                        color = androidx.glance.color.ColorProvider(
+                                day = androidx.compose.ui.graphics.Color.White.copy(alpha = 0.8f),
+                                night = androidx.compose.ui.graphics.Color.White.copy(alpha = 0.8f)
+                                        )
+                                    ),
+                        modifier = GlanceModifier.padding(top = 4.dp)
+                                )
+                }
+            }
         }
     }
 }
@@ -65,166 +201,100 @@ private fun HourlyWeatherWidgetContent(context: Context) {
                 intent.flags = Intent.FLAG_ACTIVITY_NEW_TASK
                 context.startActivity(intent)
             }
-            .padding(8.dp),
-        contentAlignment = Alignment.Center
+            .padding(12.dp),
+        contentAlignment = GlanceAlignment.Center
     ) {
         if (weatherData.value == null) {
-            Text(
-                text = "Không có dữ liệu thời tiết",
-                style = TextStyle(fontSize = 14.sp)
-            )
-        } else {
-            val iconRes = if (WeatherUtils.isResourceAvailable(context, WeatherUtils.getWeatherIcon(weatherData.value!!.currentWeatherCode))) {
-                WeatherUtils.getWeatherIcon(weatherData.value!!.currentWeatherCode)
-            } else {
-                android.R.drawable.ic_dialog_info
-            }
-
-            Column(
-                horizontalAlignment = Alignment.CenterHorizontally,
-                modifier = GlanceModifier.fillMaxSize()
+            Box(
+                modifier = GlanceModifier
+                    .fillMaxSize()
+                    .padding(16.dp),
+                contentAlignment = GlanceAlignment.Center
             ) {
                 Text(
-                    text = weatherData.value!!.cityName,
+                    text = "Đang tải dữ liệu thời tiết...",
                     style = TextStyle(
-                        fontSize = 16.sp,
-                        fontWeight = FontWeight.Bold
-                    ),
-                    modifier = GlanceModifier.padding(bottom = 4.dp)
-                )
-
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = GlanceModifier.padding(bottom = 8.dp)
-                ) {
-                    Text(
-                        text = "${UnitConverter.convertTemperature(weatherData.value!!.currentTemperature, temperatureUnit).toInt()}°${if (temperatureUnit == UnitConverter.TemperatureUnit.CELSIUS) "C" else "F"}",
-                        style = TextStyle(
-                            fontSize = 36.sp,
-                            fontWeight = FontWeight.Bold
+                        fontSize = 14.sp,
+                        fontWeight = GlanceFontWeight.Medium,
+                        color = androidx.glance.color.ColorProvider(
+                            day = androidx.compose.ui.graphics.Color.White,
+                            night = androidx.compose.ui.graphics.Color.White
                         )
                     )
-                    Image(
-                        provider = ImageProvider(iconRes),
-                        contentDescription = "Weather Icon",
-                        modifier = GlanceModifier.size(36.dp).padding(start = 8.dp)
+                )
+            }
+        } else {
+            Column(
+                horizontalAlignment = GlanceAlignment.CenterHorizontally,
+                modifier = GlanceModifier.fillMaxSize()
+            ) {
+                // Header
+                Row(
+                    horizontalAlignment = GlanceAlignment.CenterHorizontally,
+                    verticalAlignment = GlanceAlignment.CenterVertically
+                ) {
+                    Text(
+                        text = weatherData.value!!.cityName,
+                        style = TextStyle(
+                            fontSize = 16.sp,
+                            fontWeight = GlanceFontWeight.Bold,
+                            color = androidx.glance.color.ColorProvider(
+                                day = androidx.compose.ui.graphics.Color.White,
+                                night = androidx.compose.ui.graphics.Color.White
+                            )
+                        )
+                    )
+                    Text(
+                        text = " ${UnitConverter.convertTemperature(weatherData.value!!.currentTemperature, temperatureUnit).toInt()}°",
+                        style = TextStyle(
+                            fontSize = 20.sp,
+                            fontWeight = GlanceFontWeight.Bold,
+                            color = androidx.glance.color.ColorProvider(
+                                day = androidx.compose.ui.graphics.Color.White,
+                                night = androidx.compose.ui.graphics.Color.White
+                            )
+                        )
                     )
                 }
 
-                Text(
-                    text = WeatherUtils.getWeatherDescription(weatherData.value!!.currentWeatherCode),
-                    style = TextStyle(fontSize = 14.sp),
-                    modifier = GlanceModifier.padding(bottom = 8.dp)
-                )
-
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalAlignment = Alignment.CenterHorizontally
-                ) {
-                    weatherData.value!!.hourlyForecasts.forEach { forecast ->
+                // Hourly forecast
+                    Row(
+                    horizontalAlignment = GlanceAlignment.CenterHorizontally,
+                    modifier = GlanceModifier.padding(top = 8.dp)
+                    ) {
+                    weatherData.value!!.hourlyForecasts.take(5).forEach { forecast ->
                         Column(
                             modifier = GlanceModifier.padding(horizontal = 4.dp),
-                            horizontalAlignment = Alignment.CenterHorizontally
+                            horizontalAlignment = GlanceAlignment.CenterHorizontally
                         ) {
                             Text(
-                                text = "${UnitConverter.convertTemperature(forecast.temperature, temperatureUnit).toInt()}°",
-                                style = TextStyle(fontSize = 14.sp)
+                                text = forecast.time.format(DateTimeFormatter.ofPattern("HH:mm")),
+                                style = TextStyle(
+                                    fontSize = 10.sp,
+                                    color = androidx.glance.color.ColorProvider(
+                                        day = androidx.compose.ui.graphics.Color.White.copy(alpha = 0.8f),
+                                        night = androidx.compose.ui.graphics.Color.White.copy(alpha = 0.8f)
+                                    )
+                                )
+                            )
+                            Image(
+                                provider = ImageProvider(getWeatherIconResource(forecast.weatherCode)),
+                                contentDescription = "Weather Icon",
+                                modifier = GlanceModifier.size(20.dp).padding(vertical = 2.dp)
                             )
                             Text(
-                                text = forecast.time.format(DateTimeFormatter.ofPattern("HH:mm")),
-                                style = TextStyle(fontSize = 10.sp),
-                                modifier = GlanceModifier.padding(top = 2.dp)
+                                text = "${UnitConverter.convertTemperature(forecast.temperature, temperatureUnit).toInt()}°",
+                                style = TextStyle(
+                                    fontSize = 12.sp,
+                                    fontWeight = GlanceFontWeight.Medium,
+                                    color = androidx.glance.color.ColorProvider(
+                                        day = androidx.compose.ui.graphics.Color.White,
+                                        night = androidx.compose.ui.graphics.Color.White
+                                    )
+                                )
                             )
                         }
                     }
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun CurrentWeatherWidgetContent(context: Context) {
-    val weatherData = produceState<WidgetWeatherData?>(initialValue = null) {
-        value = getWeatherData(context)
-    }
-    val temperatureUnit = getTemperatureUnit(context)
-    val backgroundRes = getBackgroundResource()
-
-    Box(
-        modifier = GlanceModifier
-            .fillMaxSize()
-            .background(ImageProvider(backgroundRes))
-            .clickable {
-                val intent = Intent(context, MainActivity::class.java)
-                intent.flags = Intent.FLAG_ACTIVITY_NEW_TASK
-                context.startActivity(intent)
-            }
-            .padding(8.dp),
-        contentAlignment = Alignment.Center
-    ) {
-        if (weatherData.value == null) {
-            Text(
-                text = "Không có dữ liệu thời tiết",
-                style = TextStyle(fontSize = 14.sp)
-            )
-        } else {
-            val iconRes = if (WeatherUtils.isResourceAvailable(context, WeatherUtils.getWeatherIcon(weatherData.value!!.weatherCode))) {
-                WeatherUtils.getWeatherIcon(weatherData.value!!.weatherCode)
-            } else {
-                android.R.drawable.ic_dialog_info
-            }
-
-            Column(
-                horizontalAlignment = Alignment.CenterHorizontally,
-                modifier = GlanceModifier.fillMaxSize()
-            ) {
-                Text(
-                    text = weatherData.value!!.cityName,
-                    style = TextStyle(
-                        fontSize = 16.sp,
-                        fontWeight = FontWeight.Bold
-                    ),
-                    modifier = GlanceModifier.padding(bottom = 4.dp)
-                )
-
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = GlanceModifier.padding(bottom = 8.dp)
-                ) {
-                    Text(
-                        text = "${UnitConverter.convertTemperature(weatherData.value!!.currentTemperature, temperatureUnit).toInt()}°${if (temperatureUnit == UnitConverter.TemperatureUnit.CELSIUS) "C" else "F"}",
-                        style = TextStyle(
-                            fontSize = 36.sp,
-                            fontWeight = FontWeight.Bold
-                        )
-                    )
-                    Image(
-                        provider = ImageProvider(iconRes),
-                        contentDescription = "Weather Icon",
-                        modifier = GlanceModifier.size(36.dp).padding(start = 8.dp)
-                    )
-                }
-
-                Text(
-                    text = WeatherUtils.getWeatherDescription(weatherData.value!!.weatherCode),
-                    style = TextStyle(fontSize = 14.sp),
-                    modifier = GlanceModifier.padding(bottom = 8.dp)
-                )
-
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalAlignment = Alignment.CenterHorizontally
-                ) {
-                    Text(
-                        text = "Thấp: ${UnitConverter.convertTemperature(weatherData.value!!.temperatureMin, temperatureUnit).toInt()}°${if (temperatureUnit == UnitConverter.TemperatureUnit.CELSIUS) "C" else "F"}",
-                        style = TextStyle(fontSize = 12.sp),
-                        modifier = GlanceModifier.padding(end = 8.dp)
-                    )
-                    Text(
-                        text = "Cao: ${UnitConverter.convertTemperature(weatherData.value!!.temperatureMax, temperatureUnit).toInt()}°${if (temperatureUnit == UnitConverter.TemperatureUnit.CELSIUS) "C" else "F"}",
-                        style = TextStyle(fontSize = 12.sp)
-                    )
                 }
             }
         }
@@ -238,18 +308,14 @@ private suspend fun getWeatherData(context: Context): WidgetWeatherData? {
             val currentCity = preferences.getString("current_city", "Hà Nội") ?: "Hà Nội"
             val weatherDao = WeatherDatabase.getDatabase(context).weatherDao()
 
-            // Log fetching data
             Log.d("WeatherWidget", "Fetching weather data for city: $currentCity")
 
-            // Fetch daily and hourly data
             val dailyWeatherData = weatherDao.getLatestWeatherDataWithDailyDetailsForCity(currentCity)
             val hourlyWeatherData = weatherDao.getLatestWeatherDataWithDetailsForCity(currentCity)
 
-            // Log data availability
             Log.d("WeatherWidget", "Daily data available: ${dailyWeatherData != null && dailyWeatherData.dailyDetails.isNotEmpty()}")
             Log.d("WeatherWidget", "Hourly data available: ${hourlyWeatherData != null && hourlyWeatherData.details.isNotEmpty()}")
 
-            // Try to get daily details for today
             val dailyDetail = dailyWeatherData?.dailyDetails?.find { detail ->
                 try {
                     val detailDate = LocalDateTime.parse(detail.time, DateTimeFormatter.ISO_LOCAL_DATE).toLocalDate()
@@ -260,7 +326,6 @@ private suspend fun getWeatherData(context: Context): WidgetWeatherData? {
                 }
             }
 
-            // Get the most recent hourly data (within the last 3 hours to be more lenient)
             val now = LocalDateTime.now()
             val currentHourlyDetail = hourlyWeatherData?.details?.filter { detail ->
                 try {
@@ -274,17 +339,14 @@ private suspend fun getWeatherData(context: Context): WidgetWeatherData? {
                 LocalDateTime.parse(detail.time, DateTimeFormatter.ISO_LOCAL_DATE_TIME).toEpochSecond(ZoneId.systemDefault().rules.getOffset(Instant.now()))
             }
 
-            // Log found details
             Log.d("WeatherWidget", "Daily detail found: ${dailyDetail != null}")
             Log.d("WeatherWidget", "Current hourly detail found: ${currentHourlyDetail != null}")
 
-            // Fallback logic: Use available data even if partial
             if (dailyDetail == null && currentHourlyDetail == null) {
                 Log.e("WeatherWidget", "No valid daily or hourly data for city: $currentCity")
                 return@withContext null
             }
 
-            // Construct WidgetWeatherData with fallback values
             WidgetWeatherData(
                 cityName = currentHourlyDetail?.cityName ?: dailyDetail?.cityName ?: currentCity,
                 currentTemperature = currentHourlyDetail?.temperature_2m ?: dailyDetail?.temperature_2m_max ?: 0.0,
@@ -307,6 +369,7 @@ private suspend fun getHourlyWeatherData(context: Context): HourlyWidgetWeatherD
             val currentCity = preferences.getString("current_city", "Hà Nội") ?: "Hà Nội"
             val weatherDao = WeatherDatabase.getDatabase(context).weatherDao()
             val weatherData = weatherDao.getLatestWeatherDataWithDetailsForCity(currentCity)
+            
             if (weatherData != null && weatherData.details.isNotEmpty()) {
                 val now = LocalDateTime.now()
                 val hourlyForecasts = weatherData.details
@@ -391,6 +454,30 @@ private fun getBackgroundResource(): Int {
     }
 }
 
+private fun getWeatherIconResource(weatherCode: Int): Int {
+    val currentHour = LocalDateTime.now().hour
+    val isNightTime = currentHour < 6 || currentHour >= 18
+    
+    return when (weatherCode) {
+        0 -> if (isNightTime) R.drawable.cloudy else R.drawable.sunny
+        1 -> if (isNightTime) R.drawable.cloudy else R.drawable.cloudy_with_sun
+        2 -> if (isNightTime) R.drawable.cloudy else R.drawable.cloudy_with_sun
+        3 -> R.drawable.cloudy
+        45, 48 -> R.drawable.cloudy
+        51, 53, 55 -> R.drawable.rainingg
+        56, 57 -> R.drawable.rainingg
+        61, 63, 65 -> R.drawable.rainingg
+        66, 67 -> R.drawable.rainingg
+        71, 73, 75 -> R.drawable.snow
+        77 -> R.drawable.snow
+        80, 81, 82 -> R.drawable.rainingg
+        85, 86 -> R.drawable.snow
+        95 -> R.drawable.thunderstorm
+        96, 99 -> R.drawable.thunderstorm
+        else -> if (isNightTime) R.drawable.cloudy else R.drawable.cloudy_with_sun
+    }
+}
+
 data class WidgetWeatherData(
     val cityName: String,
     val currentTemperature: Double,
@@ -412,3 +499,155 @@ data class HourlyForecast(
     val temperature: Double,
     val weatherCode: Int
 )
+
+// Preview Components (using regular Compose for preview purposes)
+@Preview(showBackground = true)
+@Composable
+fun WeatherWidgetPreview() {
+    Card(
+        modifier = Modifier
+            .width(200.dp)
+            .height(120.dp)
+            .padding(8.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = Color(0xFF5372dc).copy(alpha = 0.9f)
+        ),
+        shape = RoundedCornerShape(16.dp)
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(12.dp),
+            verticalArrangement = Arrangement.SpaceBetween
+        ) {
+            // Header with city name and last updated
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.Top
+            ) {
+                Text(
+                    text = "Hà Nội",
+                    style = MaterialTheme.typography.titleSmall,
+                    color = Color.White,
+                    fontWeight = FontWeight.Bold
+                )
+                Text(
+                    text = "14:30",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = Color.White.copy(alpha = 0.8f)
+                )
+            }
+            
+            // Current weather
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column {
+                    Text(
+                        text = "25°",
+                        style = MaterialTheme.typography.headlineLarge,
+                        color = Color.White,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Text(
+                        text = "H:28° L:22°",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Color.White.copy(alpha = 0.8f)
+                    )
+                }
+                
+                Image(
+                    painter = painterResource(id = R.drawable.sunny),
+                    contentDescription = "Weather icon",
+                    modifier = Modifier.size(40.dp)
+                )
+            }
+        }
+    }
+}
+
+@Preview(showBackground = true)
+@Composable
+fun HourlyWeatherWidgetPreview() {
+    Card(
+        modifier = Modifier
+            .width(300.dp)
+            .height(120.dp)
+            .padding(8.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = Color(0xFF5372dc).copy(alpha = 0.9f)
+        ),
+        shape = RoundedCornerShape(16.dp)
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(12.dp)
+        ) {
+            // Header
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "Hà Nội",
+                    style = MaterialTheme.typography.titleSmall,
+                    color = Color.White,
+                    fontWeight = FontWeight.Bold
+                )
+                Text(
+                    text = "25°",
+                    style = MaterialTheme.typography.headlineSmall,
+                    color = Color.White,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+            
+            Spacer(modifier = Modifier.height(8.dp))
+            
+            // Hourly forecast
+            LazyRow(
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                items(5) { index ->
+                    val times = listOf("Now", "15:00", "16:00", "17:00", "18:00")
+                    val temps = listOf("25°", "26°", "24°", "23°", "22°")
+                    val icons = listOf(
+                        R.drawable.sunny,
+                        R.drawable.cloudy_with_sun,
+                        R.drawable.cloudy,
+                        R.drawable.rainingg,
+                        R.drawable.cloudy
+                    )
+                    
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        Text(
+                            text = times[index],
+                            style = MaterialTheme.typography.bodySmall,
+                            color = Color.White.copy(alpha = 0.8f)
+                        )
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Image(
+                            painter = painterResource(id = icons[index]),
+                            contentDescription = null,
+                            modifier = Modifier.size(20.dp)
+                        )
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(
+                            text = temps[index],
+                            style = MaterialTheme.typography.bodySmall,
+                            color = Color.White,
+                            fontWeight = FontWeight.Medium
+                        )
+                    }
+                }
+            }
+        }
+    }
+} 

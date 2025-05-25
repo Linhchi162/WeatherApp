@@ -224,3 +224,169 @@ fun SearchOverlay(
 // @Preview(...)
 // @Composable
 // fun SearchOverlayPreview() { ... }
+
+@Preview(showBackground = true)
+@Composable
+fun SearchOverlayContentPreview() {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(
+                brush = Brush.verticalGradient(
+                    colors = listOf(Color(0xFFcbdfff), Color(0xFFfcdbf6))
+                ),
+                shape = RoundedCornerShape(20.dp)
+            )
+            .padding(15.dp)
+    ) {
+        // Search bar
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(bottom = 16.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            OutlinedTextField(
+                value = "Hà Nội",
+                onValueChange = {},
+                modifier = Modifier
+                    .weight(1f)
+                    .height(56.dp),
+                placeholder = {
+                    Text(
+                        "Tìm kiếm thành phố...",
+                        fontSize = 12.sp,
+                        modifier = Modifier.padding(vertical = 2.dp)
+                    )
+                },
+                leadingIcon = {
+                    Icon(
+                        painter = painterResource(id = R.drawable.kinh_lup),
+                        contentDescription = "Search",
+                        modifier = Modifier.size(20.dp),
+                        tint = Color(0xFF5372dc)
+                    )
+                },
+                trailingIcon = {
+                    IconButton(onClick = {}) {
+                        Icon(
+                            painter = painterResource(id = android.R.drawable.ic_menu_close_clear_cancel),
+                            contentDescription = "Clear",
+                            tint = Color(0xFF5372dc)
+                        )
+                    }
+                },
+                colors = OutlinedTextFieldDefaults.colors(
+                    focusedBorderColor = Color(0xFF5372dc),
+                    unfocusedBorderColor = Color(0xFF5372dc).copy(alpha = 0.5f),
+                    focusedLabelColor = Color(0xFF5372dc),
+                    cursorColor = Color(0xFF5372dc),
+                    focusedTextColor = Color(0xFF5372dc),
+                    unfocusedTextColor = Color(0xFF5372dc)
+                ),
+                shape = RoundedCornerShape(24.dp),
+                singleLine = true
+            )
+            Spacer(modifier = Modifier.width(4.dp))
+            IconButton(onClick = {}) {
+                Icon(
+                    painter = painterResource(id = R.drawable.setting),
+                    contentDescription = "Filter",
+                    tint = Color(0xFF5372dc),
+                    modifier = Modifier.size(20.dp)
+                )
+            }
+        }
+
+        // Sample search results
+        LazyColumn(
+            modifier = Modifier.fillMaxWidth(),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            items(3) { index ->
+                val cities = listOf("Hà Nội, Việt Nam", "TP. Hồ Chí Minh, Việt Nam", "Đà Nẵng, Việt Nam")
+                
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(Color.Transparent)
+                        .padding(vertical = 10.dp, horizontal = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        painter = painterResource(id = android.R.drawable.ic_menu_myplaces),
+                        contentDescription = "Location",
+                        tint = Color(0xFF5372dc).copy(alpha = 0.7f),
+                        modifier = Modifier.size(20.dp)
+                    )
+                    Spacer(modifier = Modifier.width(12.dp))
+                    Text(
+                        text = cities[index],
+                        fontSize = 15.sp,
+                        color = Color(0xFF5372dc),
+                        fontWeight = FontWeight.Medium
+                    )
+                }
+                Divider(color = Color(0xFF5372dc).copy(alpha = 0.2f))
+            }
+        }
+    }
+}
+
+@Preview(showBackground = true)
+@Composable
+fun SearchLoadingStatePreview() {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(
+                brush = Brush.verticalGradient(
+                    colors = listOf(Color(0xFFcbdfff), Color(0xFFfcdbf6))
+                ),
+                shape = RoundedCornerShape(20.dp)
+            )
+            .padding(15.dp)
+    ) {
+        // Search bar
+        OutlinedTextField(
+            value = "Searching...",
+            onValueChange = {},
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(56.dp),
+            placeholder = {
+                Text("Tìm kiếm thành phố...", fontSize = 12.sp)
+            },
+            leadingIcon = {
+                Icon(
+                    painter = painterResource(id = R.drawable.kinh_lup),
+                    contentDescription = "Search",
+                    modifier = Modifier.size(20.dp),
+                    tint = Color(0xFF5372dc)
+                )
+            },
+            colors = OutlinedTextFieldDefaults.colors(
+                focusedBorderColor = Color(0xFF5372dc),
+                unfocusedBorderColor = Color(0xFF5372dc).copy(alpha = 0.5f),
+                focusedLabelColor = Color(0xFF5372dc),
+                cursorColor = Color(0xFF5372dc),
+                focusedTextColor = Color(0xFF5372dc),
+                unfocusedTextColor = Color(0xFF5372dc)
+            ),
+            shape = RoundedCornerShape(24.dp),
+            singleLine = true
+        )
+
+        Spacer(modifier = Modifier.height(32.dp))
+
+        // Loading indicator
+        Box(
+            modifier = Modifier.fillMaxWidth(),
+            contentAlignment = Alignment.Center
+        ) {
+            CircularProgressIndicator(
+                color = Color(0xFF5372dc)
+            )
+        }
+    }
+}

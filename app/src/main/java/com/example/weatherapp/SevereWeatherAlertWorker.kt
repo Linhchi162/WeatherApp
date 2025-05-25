@@ -44,7 +44,7 @@ class SevereWeatherAlertWorker(
             severeWeatherDetails.forEach { detail ->
                 val detailTime = LocalDateTime.parse(detail.time, formatter)
                 val timeString = detailTime.format(timeFormatter)
-                val description = WeatherUtils.getWeatherDescription(detail.weather_code)
+                val description = WeatherUtils.getWeatherDescription(detail.weather_code, cityName)
                 val emoji = WeatherUtils.getWeatherEmoji(detail.weather_code)
                 val title = "Cảnh báo thời tiết khắc nghiệt tại $cityName"
                 val message = "Thời tiết khắc nghiệt sắp xảy ra vào $timeString: $description $emoji"

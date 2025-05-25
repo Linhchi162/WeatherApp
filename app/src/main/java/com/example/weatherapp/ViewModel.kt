@@ -21,6 +21,8 @@ import kotlinx.coroutines.isActive
 import kotlin.math.pow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import com.google.android.gms.maps.model.LatLng
+import com.google.android.gms.maps.model.LatLngBounds
 
 
 data class City(
@@ -48,11 +50,56 @@ data class WeatherDataState(
     var dailyTempMinList: List<Double> = emptyList(),
     var dailyWeatherCodeList: List<Int> = emptyList(),
     var dailyPrecipitationList: List<Double> = emptyList(),
+    var dailySunriseList: List<String> = emptyList(),
+    var dailySunsetList: List<String> = emptyList(),
     var lastUpdateTime: Long? = null,
     var errorMessage: String? = null,
     // --- Thêm trường AQI ---
     var currentAqi: Int? = null, // Chỉ số AQI hiện tại (nullable)
-    var currentPm25: Double? = null // Chỉ số PM2.5 hiện tại (nullable)
+    var currentPm25: Double? = null, // Chỉ số PM2.5 hiện tại (nullable)
+    // --- Thêm trường Radar Cache ---
+    var radarCache: Map<String, RadarLayerCache> = emptyMap(), // Cache cho các layer radar
+    var radarLastUpdate: Long? = null // Thời gian update cache cuối cùng
+)
+
+data class RadarLayerCache(
+    val layer: String,
+    val tiles: List<RadarTile>,
+    val timestamp: Long,
+    val isComplete: Boolean = false
+)
+
+data class RadarTile(
+    val x: Int,
+    val y: Int,
+    val zoom: Int,
+    val bitmapData: ByteArray? = null, // Store bitmap as byte array for caching
+    val isLoaded: Boolean = false,
+    val bounds: com.google.android.gms.maps.model.LatLngBounds? = null
+) {
+    override fun equals(other: Any?): Boolean {
+        if (this === other) return true
+        if (javaClass != other?.javaClass) return false
+        other as RadarTile
+        return x == other.x && y == other.y && zoom == other.zoom
+    }
+
+    override fun hashCode(): Int {
+        var result = x
+        result = 31 * result + y
+        result = 31 * result + zoom
+        return result
+    }
+}
+
+data class LatLngBounds(
+    val southwest: LatLng,
+    val northeast: LatLng
+)
+
+data class LatLng(
+    val latitude: Double,
+    val longitude: Double
 )
 
 data class PlaceSuggestion( // Lớp đơn giản để hiển thị trong UI
@@ -73,6 +120,8 @@ class WeatherViewModel(
     // Hằng số cho debug log
     companion object {
         const val DEBUG_TAG = "API_CITY_CHECK"
+        const val RADAR_CACHE_EXPIRY_MS = 10 * 60 * 1000L // 10 phút
+        const val RADAR_DEFAULT_ZOOM = 5
     }
 
     private var cities by mutableStateOf(
@@ -175,6 +224,9 @@ class WeatherViewModel(
             // Fetch data cho thành phố mới
             fetchWeatherAndAirQuality(city.name, city.latitude, city.longitude)
             
+            // Preload radar data để cải thiện performance
+            preloadRadarForCity(city.name)
+            
             // Cập nhật currentCity
             updateCurrentCity(city.name)
             
@@ -228,12 +280,15 @@ class WeatherViewModel(
                     originalCities = originalCities.filter { it.name != cityNameToDelete }
                 }
 
-                // 2. Cập nhật State Weather Map
+                // 2. Clear radar cache for deleted city first
+                clearRadarCache(cityNameToDelete)
+
+                // 3. Cập nhật State Weather Map
                 weatherDataMap = weatherDataMap.toMutableMap().apply {
                     remove(cityNameToDelete)
                 }
 
-                // 3. Cập nhật currentCity nếu thành phố bị xóa là thành phố hiện tại
+                // 4. Cập nhật currentCity nếu thành phố bị xóa là thành phố hiện tại
                 if (currentCity == cityNameToDelete) {
                     currentCity = cities.firstOrNull()?.name ?: "" // Chuyển về thành phố đầu tiên hoặc rỗng
                     Log.d("WeatherViewModel", "Current city after delete: $currentCity")
@@ -383,7 +438,9 @@ class WeatherViewModel(
                                 temperature_2m_max = response.daily.temperature_2m_max[index],
                                 temperature_2m_min = response.daily.temperature_2m_min[index],
                                 weather_code = response.daily.weathercode[index],
-                                precipitation_probability_max = response.daily.precipitation_probability_max[index]
+                                precipitation_probability_max = response.daily.precipitation_probability_max[index],
+                                sunrise = response.daily.sunrise[index],
+                                sunset = response.daily.sunset[index]
                             )
                         } else {
                             Log.e("WeatherViewModel", "Inconsistent list sizes in daily data for $cityName at index $index")
@@ -465,6 +522,8 @@ class WeatherViewModel(
                         newWeatherData.dailyTempMinList = dailyDetails.map { it.temperature_2m_min }
                         newWeatherData.dailyWeatherCodeList = dailyDetails.map { it.weather_code }
                         newWeatherData.dailyPrecipitationList = dailyDetails.map { it.precipitation_probability_max }
+                        newWeatherData.dailySunriseList = dailyDetails.map { it.sunrise }
+                        newWeatherData.dailySunsetList = dailyDetails.map { it.sunset }
                         // Nếu hourly data bị lỗi, xóa errorMessage ở đây nếu daily data thành công
                         if(newWeatherData.errorMessage != null && newWeatherData.dailyTimeList.isNotEmpty()) {
                             // Giữ lại errorMessage nếu cả hourly và daily đều lỗi, hoặc chỉ hiển thị lỗi nếu cả 2 đều rỗng
@@ -633,7 +692,9 @@ class WeatherViewModel(
                             WeatherDailyDetail(
                                 weatherDataId = weatherDataId, cityName = cityName, time = time,
                                 temperature_2m_max = maxT, temperature_2m_min = minT,
-                                weather_code = code, precipitation_probability_max = precip
+                                weather_code = code, precipitation_probability_max = precip,
+                                sunrise = weatherResp.daily.sunrise[index],
+                                sunset = weatherResp.daily.sunset[index]
                             )
                         } else {
                             Log.w("WeatherViewModel", "Incomplete daily data at index $index for $cityName")
@@ -661,6 +722,8 @@ class WeatherViewModel(
                 newState.dailyTempMinList = weatherResp.daily.temperature_2m_min?.mapNotNull { it } ?: emptyList()
                 newState.dailyWeatherCodeList = weatherResp.daily.weathercode?.mapNotNull { it } ?: emptyList()
                 newState.dailyPrecipitationList = weatherResp.daily.precipitation_probability_max?.mapNotNull { it } ?: emptyList()
+                newState.dailySunriseList = weatherResp.daily.sunrise?.mapNotNull { it } ?: emptyList()
+                newState.dailySunsetList = weatherResp.daily.sunset?.mapNotNull { it } ?: emptyList()
                 newState.lastUpdateTime = System.currentTimeMillis()
 
 
@@ -731,6 +794,8 @@ class WeatherViewModel(
         this.dailyTempMinList = source.dailyTempMinList
         this.dailyWeatherCodeList = source.dailyWeatherCodeList
         this.dailyPrecipitationList = source.dailyPrecipitationList
+        this.dailySunriseList = source.dailySunriseList
+        this.dailySunsetList = source.dailySunsetList
         // Do not copy AQI fields or lastUpdateTime or errorMessage here
     }
 
@@ -1646,6 +1711,231 @@ class WeatherViewModel(
             CountryInfo("ID", "Indonesia", "AS", "Jakarta", "id", "IDR", "", ""),
             CountryInfo("MY", "Malaysia", "AS", "Kuala Lumpur", "ms", "MYR", "", ""),
             CountryInfo("SG", "Singapore", "AS", "Singapore", "en", "SGD", "", "")
+        )
+    }
+    
+    // ================ RADAR CACHING FUNCTIONS ================
+    
+    // Preload radar data for a city
+    fun preloadRadarForCity(cityName: String) {
+        val city = cities.find { it.name == cityName } ?: return
+        
+        viewModelScope.launch {
+            Log.d("WeatherViewModel", "Preloading radar data for $cityName")
+            
+            val layers = listOf("precipitation", "clouds", "wind", "temp")
+            
+            layers.forEach { layer ->
+                if (!isRadarCacheValid(cityName, layer)) {
+                    loadRadarLayer(cityName, city.latitude, city.longitude, layer)
+                }
+            }
+        }
+    }
+    
+    // Check if radar cache is valid (not expired)
+    private fun isRadarCacheValid(cityName: String, layer: String): Boolean {
+        val weatherData = weatherDataMap[cityName] ?: return false
+        val layerCache = weatherData.radarCache[layer] ?: return false
+        
+        val now = System.currentTimeMillis()
+        return layerCache.isComplete && (now - layerCache.timestamp) < RADAR_CACHE_EXPIRY_MS
+    }
+    
+    // Load a specific radar layer and cache it
+    private suspend fun loadRadarLayer(
+        cityName: String, 
+        latitude: Double, 
+        longitude: Double, 
+        layer: String
+    ) {
+        try {
+            withContext(Dispatchers.IO) {
+                Log.d("WeatherViewModel", "Loading radar layer $layer for $cityName")
+                
+                val zoom = RADAR_DEFAULT_ZOOM
+                val (centerX, centerY) = latLonToTileXY(latitude, longitude, zoom)
+                
+                val tilesToLoad = mutableListOf<RadarTile>()
+                
+                // Load 3x3 grid of tiles
+                for (dx in -1..1) {
+                    for (dy in -1..1) {
+                        val xTile = centerX + dx
+                        val yTile = centerY + dy
+                        
+                        val n = 1 shl zoom
+                        val wrappedX = ((xTile % n) + n) % n
+                        
+                        val bounds = tileToLatLonBounds(wrappedX, yTile, zoom)
+                        val url = "https://tile.openweathermap.org/map/$layer/$zoom/$wrappedX/$yTile.png?appid=960b4897d630b53c8faeb909817bf31a"
+                        
+                        val bitmapData = try {
+                            val connection = java.net.URL(url).openConnection()
+                            connection.connectTimeout = 3000
+                            connection.readTimeout = 3000
+                            connection.getInputStream().use { inputStream ->
+                                inputStream.readBytes()
+                            }
+                        } catch (e: Exception) {
+                            Log.e("WeatherViewModel", "Failed to load radar tile: $url", e)
+                            null
+                        }
+                        
+                        tilesToLoad.add(
+                            RadarTile(
+                                x = wrappedX,
+                                y = yTile,
+                                zoom = zoom,
+                                bitmapData = bitmapData,
+                                isLoaded = bitmapData != null,
+                                bounds = bounds
+                            )
+                        )
+                    }
+                }
+                
+                // Update cache on main thread
+                withContext(Dispatchers.Main) {
+                    updateRadarCache(cityName, layer, tilesToLoad)
+                }
+            }
+        } catch (e: Exception) {
+            Log.e("WeatherViewModel", "Error loading radar layer $layer for $cityName", e)
+        }
+    }
+    
+    // Update radar cache for a city and layer
+    private fun updateRadarCache(cityName: String, layer: String, tiles: List<RadarTile>) {
+        val currentData = weatherDataMap[cityName] ?: WeatherDataState()
+        val newRadarCache = currentData.radarCache.toMutableMap()
+        
+        val layerCache = RadarLayerCache(
+            layer = layer,
+            tiles = tiles,
+            timestamp = System.currentTimeMillis(),
+            isComplete = tiles.all { it.isLoaded }
+        )
+        
+        newRadarCache[layer] = layerCache
+        
+        // Create updated data by copying all fields manually
+        val updatedData = WeatherDataState(
+            timeList = currentData.timeList,
+            temperatureList = currentData.temperatureList,
+            weatherCodeList = currentData.weatherCodeList,
+            precipitationList = currentData.precipitationList,
+            humidityList = currentData.humidityList,
+            windSpeedList = currentData.windSpeedList,
+            uvList = currentData.uvList,
+            feelsLikeList = currentData.feelsLikeList,
+            pressureList = currentData.pressureList,
+            visibilityList = currentData.visibilityList,
+            dailyTimeList = currentData.dailyTimeList,
+            dailyTempMaxList = currentData.dailyTempMaxList,
+            dailyTempMinList = currentData.dailyTempMinList,
+            dailyWeatherCodeList = currentData.dailyWeatherCodeList,
+            dailyPrecipitationList = currentData.dailyPrecipitationList,
+            dailySunriseList = currentData.dailySunriseList,
+            dailySunsetList = currentData.dailySunsetList,
+            lastUpdateTime = currentData.lastUpdateTime,
+            errorMessage = currentData.errorMessage,
+            currentAqi = currentData.currentAqi,
+            currentPm25 = currentData.currentPm25,
+            radarCache = newRadarCache,
+            radarLastUpdate = System.currentTimeMillis()
+        )
+        
+        weatherDataMap = weatherDataMap.toMutableMap().apply {
+            put(cityName, updatedData)
+        }
+        
+        Log.d("WeatherViewModel", "Updated radar cache for $cityName, layer $layer: ${tiles.count { it.isLoaded }}/${tiles.size} tiles loaded")
+    }
+    
+    // Get cached radar tiles for a layer
+    fun getCachedRadarTiles(cityName: String, layer: String): List<RadarTile> {
+        val weatherData = weatherDataMap[cityName] ?: return emptyList()
+        val layerCache = weatherData.radarCache[layer] ?: return emptyList()
+        
+        // Check if cache is still valid
+        if (isRadarCacheValid(cityName, layer)) {
+            return layerCache.tiles.filter { it.isLoaded }
+        }
+        
+        return emptyList()
+    }
+    
+    // Convert lat/lon to tile coordinates
+    private fun latLonToTileXY(lat: Double, lon: Double, zoom: Int): Pair<Int, Int> {
+        val n = 1 shl zoom
+        val x = ((lon + 180.0) / 360.0 * n).toInt()
+        val latRad = Math.toRadians(lat)
+        val y = ((1.0 - Math.log(Math.tan(latRad) + 1.0 / Math.cos(latRad)) / Math.PI) / 2.0 * n).toInt()
+        return Pair(x, y)
+    }
+    
+    // Convert tile coordinates to lat/lon bounds
+    private fun tileToLatLonBounds(x: Int, y: Int, zoom: Int): com.google.android.gms.maps.model.LatLngBounds {
+        val n = 1 shl zoom
+        val lonDeg1 = x.toDouble() / n * 360.0 - 180.0
+        val lonDeg2 = (x + 1).toDouble() / n * 360.0 - 180.0
+        val latRad1 = Math.atan(Math.sinh(Math.PI * (1 - 2.0 * y / n)))
+        val latRad2 = Math.atan(Math.sinh(Math.PI * (1 - 2.0 * (y + 1) / n)))
+        val latDeg1 = Math.toDegrees(latRad1)
+        val latDeg2 = Math.toDegrees(latRad2)
+        
+        return com.google.android.gms.maps.model.LatLngBounds(
+            com.google.android.gms.maps.model.LatLng(latDeg2, lonDeg1), // southwest
+            com.google.android.gms.maps.model.LatLng(latDeg1, lonDeg2)  // northeast
+        )
+    }
+    
+    // Clear radar cache for a city (useful when removing city)
+    fun clearRadarCache(cityName: String) {
+        val currentData = weatherDataMap[cityName] ?: return
+        
+        // Create updated data by copying all fields manually
+        val updatedData = WeatherDataState(
+            timeList = currentData.timeList,
+            temperatureList = currentData.temperatureList,
+            weatherCodeList = currentData.weatherCodeList,
+            precipitationList = currentData.precipitationList,
+            humidityList = currentData.humidityList,
+            windSpeedList = currentData.windSpeedList,
+            uvList = currentData.uvList,
+            feelsLikeList = currentData.feelsLikeList,
+            pressureList = currentData.pressureList,
+            visibilityList = currentData.visibilityList,
+            dailyTimeList = currentData.dailyTimeList,
+            dailyTempMaxList = currentData.dailyTempMaxList,
+            dailyTempMinList = currentData.dailyTempMinList,
+            dailyWeatherCodeList = currentData.dailyWeatherCodeList,
+            dailyPrecipitationList = currentData.dailyPrecipitationList,
+            dailySunriseList = currentData.dailySunriseList,
+            dailySunsetList = currentData.dailySunsetList,
+            lastUpdateTime = currentData.lastUpdateTime,
+            errorMessage = currentData.errorMessage,
+            currentAqi = currentData.currentAqi,
+            currentPm25 = currentData.currentPm25,
+            radarCache = emptyMap(),
+            radarLastUpdate = null
+        )
+        
+        weatherDataMap = weatherDataMap.toMutableMap().apply {
+            put(cityName, updatedData)
+        }
+        
+        Log.d("WeatherViewModel", "Cleared radar cache for $cityName")
+    }
+    
+    // Get all available radar layers
+    fun getAvailableRadarLayers(): List<Pair<String, String>> {
+        return listOf(
+            "precipitation" to "Mưa",
+            "clouds" to "Mây",
+            "wind" to "Gió", 
+            "temp" to "Nhiệt độ"
         )
     }
 }

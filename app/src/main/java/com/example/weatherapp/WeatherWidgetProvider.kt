@@ -11,7 +11,7 @@ import androidx.work.WorkManager
 import java.util.concurrent.TimeUnit
 
 class WeatherWidgetProvider : GlanceAppWidgetReceiver() {
-    override val glanceAppWidget: GlanceAppWidget = CurrentWeatherWidget()
+    override val glanceAppWidget: GlanceAppWidget = WeatherWidget()
 
     override fun onUpdate(
         context: Context,
