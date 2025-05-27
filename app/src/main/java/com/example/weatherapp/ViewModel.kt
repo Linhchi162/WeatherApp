@@ -913,7 +913,6 @@ class WeatherViewModel(
         searchJob?.cancel() // Hủy job tìm kiếm cũ nếu có
 
         if (query.length < 2) { // Sửa từ 3 xuống 2 ký tự
-
             placeSuggestions = emptyList()
             isSearching = false
             searchError = null
@@ -924,51 +923,51 @@ class WeatherViewModel(
         searchError = null // Xóa lỗi cũ
 
         searchJob = viewModelScope.launch {
-
             delay(300L) // Debounce: Chờ 300ms sau khi người dùng ngừng gõ mới tìm kiếm
             try {
-                // Chuyển đổi thành một tìm kiếm đơn giản bằng GeoNames
-                val response = withContext(Dispatchers.IO) {
-                    geoNamesService.getCitiesByCountry(
-                        countryCode = "", // Để trống để tìm kiếm toàn cầu
-                        featureClass = "P", // Populated places
+                // Gọi song song hai ngôn ngữ
+                val (responseVi, responseEn) = withContext(Dispatchers.IO) {
+                    val vi = async { geoNamesService.getCitiesByCountry(
+                        countryCode = "",
+                        featureClass = "P",
                         maxRows = 10,
-                        orderBy = "relevance", // Sắp xếp theo mức độ liên quan
+                        orderBy = "relevance",
                         username = RetrofitInstance.GEONAMES_USERNAME,
                         language = "vi",
-                        // Thêm tham số name_startsWith để tìm theo prefix
-                        nameStartsWith = query
-                    )
+                        q = query
+                    ) }
+                    val en = async { geoNamesService.getCitiesByCountry(
+                        countryCode = "",
+                        featureClass = "P",
+                        maxRows = 10,
+                        orderBy = "relevance",
+                        username = RetrofitInstance.GEONAMES_USERNAME,
+                        language = "en",
+                        q = query
+                    ) }
+                    Pair(vi.await(), en.await())
                 }
 
-                // Xử lý kết quả trả về từ GeoNames
-                val suggestions = response.geonames?.map { geoCity ->
-                        PlaceSuggestion(
-                        formattedName = geoCity.name, // Chỉ hiển thị tên thành phố, không kèm quốc gia để gọn gàng
+                // Gộp kết quả, loại trùng theo tên và toạ độ
+                val allGeoNames = (responseVi.geonames.orEmpty() + responseEn.geonames.orEmpty())
+                val uniqueGeoNames = allGeoNames.distinctBy { it.name.lowercase() + "_" + it.lat + "_" + it.lng }
+
+                val suggestions = uniqueGeoNames.map { geoCity ->
+                    PlaceSuggestion(
+                        formattedName = geoCity.name,
                         city = geoCity.name,
                         country = geoCity.countryName,
                         latitude = geoCity.lat.toDoubleOrNull(),
                         longitude = geoCity.lng.toDoubleOrNull()
                     )
-                } ?: emptyList()
-
+                }
                 placeSuggestions = suggestions
-                searchError = if (suggestions.isEmpty() && query.isNotEmpty()) 
-                    "Không tìm thấy kết quả nào." 
-                else 
-                    null
-
-
-            } catch (e: CancellationException) {
-                // Ignore cancellation - đây là hành vi bình thường khi debounce
-                Log.d("WeatherViewModel", "Search cancelled - this is normal")
-                throw e // Re-throw để coroutine biết nó đã bị cancel
+                isSearching = false
+                searchError = if (suggestions.isEmpty()) "Không tìm thấy địa điểm phù hợp" else null
             } catch (e: Exception) {
-                Log.e("WeatherViewModel", "Lỗi tìm kiếm địa điểm: ${e.message}", e)
-                searchError = "Lỗi khi tìm kiếm: ${e.message}"
                 placeSuggestions = emptyList()
-            } finally {
-                isSearching = false // Kết thúc trạng thái loading
+                isSearching = false
+                searchError = "Lỗi khi tìm kiếm: ${e.message}"
             }
         }
     }
@@ -1476,9 +1475,9 @@ class WeatherViewModel(
                                 val capitalResponse = withContext(Dispatchers.IO) {
                                     geoNamesService.getCitiesByCountry(
                                         countryCode = countryCode,
-                                        nameStartsWith = capital,
                                         maxRows = 1,
-                                        username = RetrofitInstance.GEONAMES_USERNAME
+                                        username = RetrofitInstance.GEONAMES_USERNAME,
+                                        q = capital // Sử dụng fulltext search thay cho nameStartsWith
                                     )
                                 }
                                 
@@ -1634,6 +1633,7 @@ class WeatherViewModel(
                         countryCode = countryCode,
                         maxRows = 50,
                         username = RetrofitInstance.GEONAMES_USERNAME
+                        // Nếu cần tìm theo tên, thêm q = ...
                     )
                     
                     val apiCities = response.geonames?.map { geoCity ->

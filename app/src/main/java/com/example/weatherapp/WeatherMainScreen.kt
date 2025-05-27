@@ -2611,26 +2611,37 @@ fun CityManagementScreen(
     LaunchedEffect(viewModel.citiesList) {
         cities = viewModel.citiesList
     }
-
+    // Dark mode detection (giống main screen)
+    val isNightTime = remember {
+        val currentHour = java.time.LocalTime.now().hour
+        currentHour < 6 || currentHour >= 18
+    }
+    val backgroundColors = if (isNightTime) {
+        listOf(Color(0xFF475985), Color(0xFF5F4064))
+    } else {
+        listOf(Color(0xFFcbdfff), Color(0xFFfcdbf6))
+    }
+    val primaryTextColor = if (isNightTime) Color.White else Color(0xFF5372dc)
+    val secondaryTextColor = if (isNightTime) Color.White.copy(alpha = 0.8f) else Color(0xFF5372dc).copy(alpha = 0.8f)
     Box(
         modifier = Modifier
             .fillMaxSize()
             .background(
                 brush = Brush.verticalGradient(
-                    colors = listOf(Color(0xFFcbdfff), Color(0xFFfcdbf6))
+                    colors = backgroundColors
                 )
             )
     ) {
         Column(modifier = Modifier.fillMaxSize()) {
             // Top Bar
             TopAppBar(
-                title = { Text("Quản lý thành phố", color = Color(0xFF5372dc)) },
+                title = { Text("Quản lý thành phố", color = primaryTextColor) },
                 navigationIcon = {
                     IconButton(onClick = onBackClick) {
                         Icon(
                             painter = painterResource(id = R.drawable.ic_back),
                             contentDescription = "Quay lại",
-                            tint = Color(0xFF5372dc)
+                            tint = primaryTextColor
                         )
                     }
                 },
@@ -2639,7 +2650,7 @@ fun CityManagementScreen(
                         Icon(
                             painter = painterResource(id = R.drawable.ic_add),
                             contentDescription = "Thêm thành phố mới",
-                            tint = Color(0xFF5372dc)
+                            tint = primaryTextColor
                         )
                     }
                 },
@@ -2647,7 +2658,6 @@ fun CityManagementScreen(
                     containerColor = Color.Transparent
                 )
             )
-
             // Instructions text
             Text(
                 text = "Quản lý danh sách thành phố của bạn. Giữ và kéo để sắp xếp lại thứ tự.",
@@ -2655,10 +2665,9 @@ fun CityManagementScreen(
                     .fillMaxWidth()
                     .padding(horizontal = 16.dp, vertical = 8.dp),
                 fontSize = 14.sp,
-                color = Color(0xFF5372dc),
+                color = secondaryTextColor,
                 textAlign = TextAlign.Center
             )
-
             // City list with drag & drop
             LazyColumn(
                 state = listState,
@@ -2675,12 +2684,13 @@ fun CityManagementScreen(
                                     draggedItemIndex = item.index
                                 }
                             },
+                            onDrag = { change, dragAmount ->
+                                change.consumeAllChanges()
+                                draggedOffset += dragAmount.y
+                                isDragging = true
+                            },
                             onDragEnd = {
                                 isDragging = false
-                                draggedItemIndex?.let { draggedIdx ->
-                                    // Cập nhật thứ tự trong ViewModel
-                                    viewModel.reorderCities(cities)
-                                }
                                 draggedItemIndex = null
                                 draggedOffset = 0f
                             },
@@ -2688,45 +2698,6 @@ fun CityManagementScreen(
                                 isDragging = false
                                 draggedItemIndex = null
                                 draggedOffset = 0f
-                            },
-                            onDrag = { change, dragAmount ->
-                                change.consumeAllChanges()
-                                draggedOffset += dragAmount.y
-                                
-                                draggedItemIndex?.let { currentIndex ->
-                                    val visibleItems = listState.layoutInfo.visibleItemsInfo
-                                    val draggedItem = visibleItems.firstOrNull { it.index == currentIndex }
-                                    draggedItem?.let { item ->
-                                        val itemHeight = item.size
-                                        // Nếu kéo xuống dưới
-                                        if (draggedOffset > itemHeight / 2 && currentIndex < cities.lastIndex) {
-                                            val newList = cities.toMutableList()
-                                            Collections.swap(newList, currentIndex, currentIndex + 1)
-                                            cities = newList
-                                            draggedItemIndex = currentIndex + 1
-                                            draggedOffset -= itemHeight
-                                        }
-                                        // Nếu kéo lên trên
-                                        else if (draggedOffset < -itemHeight / 2 && currentIndex > 0) {
-                                            val newList = cities.toMutableList()
-                                            Collections.swap(newList, currentIndex, currentIndex - 1)
-                                            cities = newList
-                                            draggedItemIndex = currentIndex - 1
-                                            draggedOffset += itemHeight
-                                        }
-                                    }
-                                }
-                                // Auto-scroll logic giữ nguyên
-                                val maxOffset = listState.layoutInfo.viewportEndOffset
-                                val minOffset = listState.layoutInfo.viewportStartOffset
-                                when {
-                                    draggedOffset > maxOffset -> scope.launch {
-                                        listState.scrollBy(50f)
-                                    }
-                                    draggedOffset < minOffset -> scope.launch {
-                                        listState.scrollBy(-50f)
-                                    }
-                                }
                             }
                         )
                     }
@@ -2737,7 +2708,6 @@ fun CityManagementScreen(
                 ) { index, city ->
                     val isDragged = index == draggedItemIndex
                     val elevation = if (isDragged) 8.dp else 0.dp
-                    
                     SimpleCityItem(
                         city = city,
                         weatherData = viewModel.weatherDataMap[city.name],
@@ -2755,12 +2725,13 @@ fun CityManagementScreen(
                                     scaleY = 1.05f
                                 }
                             }
-                            .zIndex(if (isDragged) 1f else 0f)
+                            .zIndex(if (isDragged) 1f else 0f),
+                        isNightTime = isNightTime,
+                        primaryTextColor = primaryTextColor,
+                        secondaryTextColor = secondaryTextColor
                     )
-                    
                     Spacer(modifier = Modifier.height(8.dp))
                 }
-
                 // Show empty state if no cities
                 if (cities.isEmpty()) {
                     item {
@@ -2773,7 +2744,7 @@ fun CityManagementScreen(
                             Text(
                                 text = "Không có thành phố nào. Thêm thành phố từ tính năng tìm kiếm.",
                                 textAlign = TextAlign.Center,
-                                color = Color(0xFF5372dc),
+                                color = secondaryTextColor,
                                 fontSize = 16.sp
                             )
                         }
@@ -2781,7 +2752,6 @@ fun CityManagementScreen(
                 }
             }
         }
-        
         // SearchOverlay
         if (showSearchOverlay) {
             SearchOverlay(
@@ -2803,14 +2773,15 @@ fun SimpleCityItem(
     city: City,
     weatherData: WeatherDataState?,
     onDelete: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    isNightTime: Boolean = false,
+    primaryTextColor: Color = Color(0xFF5372dc),
+    secondaryTextColor: Color = Color(0xFF5372dc).copy(alpha = 0.7f)
 ) {
     Card(
-        modifier = modifier
-            .fillMaxWidth()
-            .padding(vertical = 4.dp),
+        modifier = modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(
-            containerColor = Color.White.copy(alpha = 0.8f)
+            containerColor = if (isNightTime) Color(0xFF332B41).copy(alpha = 0.7f) else Color.White.copy(alpha = 0.7f)
         ),
         shape = RoundedCornerShape(12.dp)
     ) {
@@ -2824,23 +2795,21 @@ fun SimpleCityItem(
             Column {
                 Text(
                     text = city.name,
-                    fontSize = 16.sp,
+                    fontSize = 18.sp,
                     fontWeight = FontWeight.Bold,
-                    color = Color(0xFF5372dc)
+                    color = primaryTextColor
                 )
-                if (city.country != null) {
-                Text(
+                if (!city.country.isNullOrBlank()) {
+                    Text(
                         text = city.country,
                         fontSize = 14.sp,
-                    color = Color(0xFF5372dc).copy(alpha = 0.7f)
-                )
+                        color = secondaryTextColor
+                    )
                 }
             }
-            
-                Row(
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                // Delete button
+            Row(
+                verticalAlignment = Alignment.CenterVertically
+            ) {
                 IconButton(
                     onClick = onDelete,
                     modifier = Modifier.size(24.dp)
@@ -2848,7 +2817,7 @@ fun SimpleCityItem(
                     Icon(
                         painter = painterResource(id = android.R.drawable.ic_menu_delete),
                         contentDescription = "Xóa",
-                        tint = Color(0xFF5372dc)
+                        tint = primaryTextColor
                     )
                 }
             }
