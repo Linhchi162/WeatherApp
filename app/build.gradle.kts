@@ -10,6 +10,7 @@ android {
     compileSdk = 35
 
 
+
     defaultConfig {
         applicationId = "com.example.weatherapp"
         minSdk = 26
