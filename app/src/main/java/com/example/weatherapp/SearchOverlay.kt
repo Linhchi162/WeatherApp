@@ -35,7 +35,21 @@ fun SearchOverlay(
     val isSearching = viewModel.isSearching
     val searchError = viewModel.searchError
 
-    // Gọi clearSearch khi dialog bị dismiss
+    // Dark mode detection
+    val isNightTime = remember {
+        val currentHour = java.time.LocalTime.now().hour
+        currentHour < 6 || currentHour >= 18
+    }
+    val backgroundColors = if (isNightTime) {
+        listOf(Color(0xFF475985), Color(0xFF5F4064))
+    } else {
+        listOf(Color(0xFFcbdfff), Color(0xFFfcdbf6))
+    }
+    val primaryTextColor = if (isNightTime) Color.White else Color(0xFF5372dc)
+    val secondaryTextColor = if (isNightTime) Color.White.copy(alpha = 0.8f) else Color(0xFF5372dc).copy(alpha = 0.8f)
+    val iconTint = if (isNightTime) Color.White else Color(0xFF5372dc)
+    val borderColor = if (isNightTime) Color.White.copy(alpha = 0.5f) else Color(0xFF5372dc).copy(alpha = 0.5f)
+
     Dialog(onDismissRequest = {
         viewModel.clearSearch() // Reset trạng thái tìm kiếm
         onDismiss() // Gọi hàm dismiss gốc
@@ -43,11 +57,9 @@ fun SearchOverlay(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .fillMaxHeight(fraction = 0.8f) // Chiếm 80% chiều cao
+                .fillMaxHeight(fraction = 0.8f)
                 .background(
-                    brush = Brush.verticalGradient(
-                        colors = listOf(Color(0xFFcbdfff), Color(0xFFfcdbf6))
-                    ),
+                    brush = Brush.verticalGradient(colors = backgroundColors),
                     shape = RoundedCornerShape(20.dp)
                 )
                 .padding(15.dp)
@@ -61,7 +73,6 @@ fun SearchOverlay(
             ) {
                 OutlinedTextField(
                     value = searchQuery,
-                    // Gọi hàm trong ViewModel khi text thay đổi
                     onValueChange = { viewModel.onSearchQueryChanged(it) },
                     modifier = Modifier
                         .weight(1f)
@@ -70,7 +81,8 @@ fun SearchOverlay(
                         Text(
                             "Tìm kiếm thành phố...",
                             fontSize = 12.sp,
-                            modifier = Modifier.padding(vertical = 2.dp)
+                            modifier = Modifier.padding(vertical = 2.dp),
+                            color = secondaryTextColor
                         )
                     },
                     leadingIcon = {
@@ -78,44 +90,33 @@ fun SearchOverlay(
                             painter = painterResource(id = R.drawable.kinh_lup),
                             contentDescription = "Search",
                             modifier = Modifier.size(20.dp),
-                            tint = Color(0xFF5372dc)
+                            tint = iconTint
                         )
                     },
                     trailingIcon = {
-                        // Hiển thị nút xóa khi có text
                         if (searchQuery.isNotEmpty()) {
                             IconButton(onClick = {
-                                viewModel.onSearchQueryChanged("") // Xóa query
+                                viewModel.onSearchQueryChanged("")
                             }) {
                                 Icon(
                                     painter = painterResource(id = android.R.drawable.ic_menu_close_clear_cancel),
                                     contentDescription = "Clear",
-                                    tint = Color(0xFF5372dc)
+                                    tint = iconTint
                                 )
                             }
                         }
                     },
                     colors = OutlinedTextFieldDefaults.colors(
-                        focusedBorderColor = Color(0xFF5372dc),
-                        unfocusedBorderColor = Color(0xFF5372dc).copy(alpha = 0.5f),
-                        focusedLabelColor = Color(0xFF5372dc),
-                        cursorColor = Color(0xFF5372dc),
-                        focusedTextColor = Color(0xFF5372dc),
-                        unfocusedTextColor = Color(0xFF5372dc)
+                        focusedBorderColor = borderColor,
+                        unfocusedBorderColor = borderColor,
+                        focusedLabelColor = iconTint,
+                        cursorColor = iconTint,
+                        focusedTextColor = primaryTextColor,
+                        unfocusedTextColor = primaryTextColor
                     ),
                     shape = RoundedCornerShape(24.dp),
                     singleLine = true
                 )
-                Spacer(modifier = Modifier.width(4.dp))
-                // Nút Filter (giữ nguyên hoặc thay đổi chức năng nếu cần)
-                IconButton(onClick = onFilterClick) {
-                    Icon(
-                        painter = painterResource(id = R.drawable.setting),
-                        contentDescription = "Filter",
-                        tint = Color(0xFF5372dc),
-                        modifier = Modifier.size(20.dp)
-                    )
-                }
             }
 
             // --- Khu vực hiển thị kết quả, loading, lỗi ---
@@ -178,9 +179,9 @@ fun SearchOverlay(
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
                                 Icon(
-                                    painter = painterResource(id = android.R.drawable.ic_menu_myplaces),
+                                    painter = painterResource(id = R.drawable.gps),
                                     contentDescription = "Location",
-                                    tint = Color(0xFF5372dc).copy(alpha = 0.7f),
+                                    tint = if (isNightTime) Color.White else Color(0xFF5372dc).copy(alpha = 0.7f),
                                     modifier = Modifier.size(20.dp) // Icon nhỏ hơn chút
                                 )
                                 Spacer(modifier = Modifier.width(12.dp))
@@ -188,7 +189,7 @@ fun SearchOverlay(
                                     Text(
                                         text = suggestion.formattedName, // Hiển thị tên đầy đủ
                                         fontSize = 15.sp, // Cỡ chữ chính
-                                        color = Color(0xFF5372dc),
+                                        color = if (isNightTime) Color.White else Color(0xFF5372dc),
                                         fontWeight = FontWeight.Medium
                                     )
                                     // Có thể hiển thị thêm thông tin phụ như quốc gia
@@ -203,7 +204,7 @@ fun SearchOverlay(
                                      */
                                 }
                             }
-                            Divider(color = Color(0xFF5372dc).copy(alpha = 0.2f)) // Thêm đường kẻ mờ
+                            Divider(color = if (isNightTime) Color.White.copy(alpha = 0.2f) else Color(0xFF5372dc).copy(alpha = 0.2f))
                         }
                     }
                 }

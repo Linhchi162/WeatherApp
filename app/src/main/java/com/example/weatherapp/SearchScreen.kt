@@ -1,4 +1,4 @@
-package com.example.weatherapp
+                                                                        package com.example.weatherapp
 
 
 import android.util.Log
@@ -45,7 +45,8 @@ fun SearchScreen(
     onDismiss: () -> Unit,
     onShowFilteredResults: () -> Unit,
     viewModel: WeatherViewModel,
-    temperatureUnit: UnitConverter.TemperatureUnit = UnitConverter.TemperatureUnit.CELSIUS
+    temperatureUnit: UnitConverter.TemperatureUnit = UnitConverter.TemperatureUnit.CELSIUS,
+    windSpeedUnit: UnitConverter.WindSpeedUnit = UnitConverter.WindSpeedUnit.KMH
 ) {
     var cityName by remember { mutableStateOf("") }
     var temperatureRange by remember { mutableStateOf(-20f..50f) }
@@ -239,6 +240,52 @@ fun SearchScreen(
 
     var showCountryError by remember { mutableStateOf(false) }
     var errorAlpha by remember { mutableStateOf(1f) }
+
+    // Xác định range và nhãn động cho nhiệt độ
+    val (tempMin, tempMax, tempLabel) = when (temperatureUnit) {
+        UnitConverter.TemperatureUnit.CELSIUS -> Triple(-20f, 50f, "°C")
+        UnitConverter.TemperatureUnit.FAHRENHEIT -> Triple(-4f, 122f, "°F")
+        else -> Triple(-20f, 50f, "°C")
+    }
+    // Xác định range và nhãn động cho gió
+    val (windMin, windMax, windLabel) = when (windSpeedUnit) {
+        UnitConverter.WindSpeedUnit.KMH -> Triple(0f, 100f, "km/h")
+        UnitConverter.WindSpeedUnit.MS -> Triple(0f, 28f, "m/s")
+        UnitConverter.WindSpeedUnit.MPH -> Triple(0f, 62f, "mph")
+        UnitConverter.WindSpeedUnit.BEAUFORT -> Triple(0f, 12f, "Bft")
+        UnitConverter.WindSpeedUnit.KNOTS -> Triple(0f, 54f, "knots")
+        UnitConverter.WindSpeedUnit.FTS -> Triple(0f, 91f, "ft/s")
+        else -> Triple(0f, 100f, "km/h")
+    }
+    // Khi đổi đơn vị, tự động convert lại giá trị range đang chọn và cập nhật vào ViewModel
+    LaunchedEffect(temperatureUnit) {
+        val old = temperatureRange
+        val newRange = when (temperatureUnit) {
+            UnitConverter.TemperatureUnit.CELSIUS -> old
+            UnitConverter.TemperatureUnit.FAHRENHEIT -> ((old.start * 9/5 + 32)..(old.endInclusive * 9/5 + 32))
+            else -> old
+        }
+        if (temperatureRange != newRange) {
+            temperatureRange = newRange
+            viewModel.updateFilters(temperatureRange = newRange)
+        }
+    }
+    LaunchedEffect(windSpeedUnit) {
+        val old = windSpeedRange
+        val newRange = when (windSpeedUnit) {
+            UnitConverter.WindSpeedUnit.KMH -> old
+            UnitConverter.WindSpeedUnit.MS -> (old.start/3.6f..old.endInclusive/3.6f)
+            UnitConverter.WindSpeedUnit.MPH -> (old.start*0.621371f..old.endInclusive*0.621371f)
+            UnitConverter.WindSpeedUnit.BEAUFORT -> (0f..12f)
+            UnitConverter.WindSpeedUnit.KNOTS -> (old.start*0.539957f..old.endInclusive*0.539957f)
+            UnitConverter.WindSpeedUnit.FTS -> (old.start*0.911344f..old.endInclusive*0.911344f)
+            else -> old
+        }
+        if (windSpeedRange != newRange) {
+            windSpeedRange = newRange
+            viewModel.updateFilters(windSpeedRange = newRange)
+        }
+    }
 
     // Hiển thị màn hình loading nếu đang lọc
     if (isLoading) {
@@ -447,9 +494,8 @@ fun SearchScreen(
                 item {
                     // Bộ lọc nhiệt độ
                     Column {
-                        val tempSymbol = if (temperatureUnit == UnitConverter.TemperatureUnit.CELSIUS) "°C" else "°F"
                         Text(
-                            text = "Nhiệt độ (${temperatureRange.start.toInt()}$tempSymbol - ${temperatureRange.endInclusive.toInt()}$tempSymbol)",
+                            text = "Nhiệt độ (${temperatureRange.start.toInt()}$tempLabel - ${temperatureRange.endInclusive.toInt()}$tempLabel)",
                             fontSize = 14.sp,
                             fontWeight = FontWeight.Medium,
                             color = textColor,
@@ -458,7 +504,7 @@ fun SearchScreen(
                         RangeSlider(
                             value = temperatureRange,
                             onValueChange = { temperatureRange = it },
-                            valueRange = -20f..50f,
+                            valueRange = tempMin..tempMax,
                             modifier = Modifier.fillMaxWidth(),
                             colors = SliderDefaults.colors(
                                 thumbColor = textColor,
@@ -473,7 +519,7 @@ fun SearchScreen(
                     // Bộ lọc tốc độ gió
                     Column {
                         Text(
-                            text = "Tốc độ gió (${windSpeedRange.start.toInt()} - ${windSpeedRange.endInclusive.toInt()} km/h)",
+                            text = "Tốc độ gió (${windSpeedRange.start.toInt()} - ${windSpeedRange.endInclusive.toInt()} $windLabel)",
                             fontSize = 14.sp,
                             fontWeight = FontWeight.Medium,
                             color = textColor,
@@ -482,7 +528,7 @@ fun SearchScreen(
                         RangeSlider(
                             value = windSpeedRange,
                             onValueChange = { windSpeedRange = it },
-                            valueRange = 0f..100f,
+                            valueRange = windMin..windMax,
                             modifier = Modifier.fillMaxWidth(),
                             colors = SliderDefaults.colors(
                                 thumbColor = textColor,

@@ -1,6 +1,7 @@
 package com.example.weatherapp
 
 import android.util.Log
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -196,7 +197,7 @@ fun FilteredCitiesScreen(
                 Spacer(modifier = Modifier.width(48.dp))
             }
 
-            // Hiển thị thông tin bộ lọc đã áp dụng
+            // Hiển thị thông tin bộ lọc đã áp dụng (dạng tĩnh, không tương tác)
             Card(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -211,31 +212,54 @@ fun FilteredCitiesScreen(
                         .fillMaxWidth()
                         .padding(16.dp)
                 ) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                    ) {
-                        Text(
-                            text = "Bộ lọc đã áp dụng:",
-                            fontSize = 16.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = if (isNightTime) Color.White else Color(0xFF5372dc),
-                            modifier = Modifier.padding(bottom = 8.dp)
-                        )
-                    }
-                    
+                    Text(
+                        text = "Bộ lọc đã áp dụng:",
+                        fontSize = 16.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = if (isNightTime) Color.White else Color(0xFF5372dc),
+                        modifier = Modifier.padding(bottom = 8.dp)
+                    )
                     Text(
                         text = "Quốc gia: ${viewModel.selectedFilterCountry}",
                         fontSize = 14.sp,
                         color = if (isNightTime) Color.White else Color(0xFF5372dc)
                     )
+                    // Hiển thị nhiệt độ theo đơn vị
                     val tempSymbol = if (temperatureUnit == UnitConverter.TemperatureUnit.CELSIUS) "°C" else "°F"
+                    val tempStart = viewModel.temperatureFilterRange.start.toInt()
+                    val tempEnd = viewModel.temperatureFilterRange.endInclusive.toInt()
                     Text(
-                        text = "Nhiệt độ: ${viewModel.temperatureFilterRange.start.toInt()}$tempSymbol - ${viewModel.temperatureFilterRange.endInclusive.toInt()}$tempSymbol",
+                        text = "Nhiệt độ: $tempStart$tempSymbol - $tempEnd$tempSymbol",
                         fontSize = 14.sp,
                         color = if (isNightTime) Color.White else Color(0xFF5372dc)
                     )
+                    // Hiển thị tốc độ gió theo đơn vị
+                    val windLabel = when (windSpeedUnit) {
+                        UnitConverter.WindSpeedUnit.KMH -> "km/h"
+                        UnitConverter.WindSpeedUnit.MS -> "m/s"
+                        UnitConverter.WindSpeedUnit.MPH -> "mph"
+                        UnitConverter.WindSpeedUnit.BEAUFORT -> "Bft"
+                        UnitConverter.WindSpeedUnit.KNOTS -> "knots"
+                        UnitConverter.WindSpeedUnit.FTS -> "ft/s"
+                    }
+                    val windStart = when (windSpeedUnit) {
+                        UnitConverter.WindSpeedUnit.KMH -> viewModel.windSpeedFilterRange.start.toInt()
+                        UnitConverter.WindSpeedUnit.MS -> (viewModel.windSpeedFilterRange.start / 3.6f).toInt()
+                        UnitConverter.WindSpeedUnit.MPH -> (viewModel.windSpeedFilterRange.start * 0.621371f).toInt()
+                        UnitConverter.WindSpeedUnit.BEAUFORT -> viewModel.windSpeedFilterRange.start.toInt()
+                        UnitConverter.WindSpeedUnit.KNOTS -> (viewModel.windSpeedFilterRange.start * 0.539957f).toInt()
+                        UnitConverter.WindSpeedUnit.FTS -> (viewModel.windSpeedFilterRange.start * 0.911344f).toInt()
+                    }
+                    val windEnd = when (windSpeedUnit) {
+                        UnitConverter.WindSpeedUnit.KMH -> viewModel.windSpeedFilterRange.endInclusive.toInt()
+                        UnitConverter.WindSpeedUnit.MS -> (viewModel.windSpeedFilterRange.endInclusive / 3.6f).toInt()
+                        UnitConverter.WindSpeedUnit.MPH -> (viewModel.windSpeedFilterRange.endInclusive * 0.621371f).toInt()
+                        UnitConverter.WindSpeedUnit.BEAUFORT -> viewModel.windSpeedFilterRange.endInclusive.toInt()
+                        UnitConverter.WindSpeedUnit.KNOTS -> (viewModel.windSpeedFilterRange.endInclusive * 0.539957f).toInt()
+                        UnitConverter.WindSpeedUnit.FTS -> (viewModel.windSpeedFilterRange.endInclusive * 0.911344f).toInt()
+                    }
                     Text(
-                        text = "Tốc độ gió: ${viewModel.windSpeedFilterRange.start.toInt()} - ${viewModel.windSpeedFilterRange.endInclusive.toInt()} km/h",
+                        text = "Tốc độ gió: $windStart - $windEnd $windLabel",
                         fontSize = 14.sp,
                         color = if (isNightTime) Color.White else Color(0xFF5372dc)
                     )
@@ -481,8 +505,10 @@ fun FilteredCitiesScreen(
                                         Spacer(modifier = Modifier.height(8.dp))
                                         
                                         // Thêm display của nhiệt độ, độ ẩm và tốc độ gió
+                                        val tempValue = UnitConverter.convertTemperature(currentTemp.toDouble(), temperatureUnit).toInt()
+                                        val tempSymbol = if (temperatureUnit == UnitConverter.TemperatureUnit.CELSIUS) "°C" else "°F"
                                         Text(
-                                            text = "Nhiệt độ: ${currentTemp}°C",
+                                            text = "Nhiệt độ: $tempValue$tempSymbol",
                                             fontSize = 12.sp,
                                             color = if (isNightTime) Color.White.copy(alpha = 0.8f) else Color(0xFF5372dc).copy(alpha = 0.8f)
                                         )
@@ -860,6 +886,208 @@ fun FilteredCityCardPreview() {
                 painter = painterResource(id = R.drawable.cloudy),
                 contentDescription = "Weather icon",
                 modifier = Modifier.size(40.dp)
+            )
+        }
+    }
+}
+
+// ========== Weather Filter Screen (moved from WeatherMainScreen.kt) ===========
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun WeatherFilterScreen(
+    viewModel: WeatherViewModel,
+    onBackClick: () -> Unit,
+    isNightTime: Boolean = remember {
+        val currentHour = java.time.LocalTime.now().hour
+        currentHour < 6 || currentHour >= 18 // Đêm từ 18:00 đến 6:00
+    }
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(
+                brush = Brush.verticalGradient(
+                    colors = if (isNightTime)
+                        listOf(Color(0xFF1A202C), Color(0xFF1A202C))
+                    else
+                        listOf(Color(0xFFcbdfff), Color(0xFFfcdbf6))
+                )
+            )
+            .padding(16.dp)
+    ) {
+        // Header
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(bottom = 24.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            IconButton(onClick = onBackClick) {
+                Icon(
+                    imageVector = Icons.Default.ArrowBack,
+                    contentDescription = "Quay lại",
+                    tint = if (isNightTime) Color.White else Color(0xFF5372dc)
+                )
+            }
+            Text(
+                text = "Lọc theo điều kiện thời tiết",
+                fontSize = 20.sp,
+                fontWeight = FontWeight.Bold,
+                color = if (isNightTime) Color.White else Color(0xFF5372dc)
+            )
+            Spacer(modifier = Modifier.width(48.dp))
+        }
+
+        // Country search field
+        OutlinedTextField(
+            value = viewModel.selectedFilterCountry,
+            onValueChange = { viewModel.updateFilters(country = it) },
+            placeholder = {
+                Text(
+                    "Nhập tên quốc gia...",
+                    color = if (isNightTime) Color.Gray else Color.Gray
+                )
+            },
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(bottom = 16.dp),
+            colors = OutlinedTextFieldDefaults.colors(
+                focusedBorderColor = if (isNightTime) Color.White else Color(0xFF5372dc),
+                unfocusedBorderColor = if (isNightTime) Color.Gray else Color(0xFF5372dc).copy(alpha = 0.5f),
+                focusedTextColor = if (isNightTime) Color.White else Color.Black,
+                unfocusedTextColor = if (isNightTime) Color.White else Color.Black,
+                cursorColor = if (isNightTime) Color.White else Color(0xFF5372dc)
+            )
+        )
+
+        // Temperature Range
+        Text(
+            text = "Nhiệt độ (-20°C - 50°C)",
+            fontSize = 16.sp,
+            color = if (isNightTime) Color.White else Color(0xFF5372dc),
+            modifier = Modifier.padding(bottom = 8.dp)
+        )
+        RangeSlider(
+            value = viewModel.temperatureFilterRange,
+            onValueChange = { viewModel.updateFilters(temperatureRange = it) },
+            valueRange = -20f..50f,
+            colors = SliderDefaults.colors(
+                thumbColor = if (isNightTime) Color.White else Color(0xFF5372dc),
+                activeTrackColor = if (isNightTime) Color.White else Color(0xFF5372dc),
+                inactiveTrackColor = if (isNightTime) Color.Gray else Color(0xFF5372dc).copy(alpha = 0.3f)
+            )
+        )
+
+        // Wind Speed Range
+        Text(
+            text = "Tốc độ gió (0 - 100 km/h)",
+            fontSize = 16.sp,
+            color = if (isNightTime) Color.White else Color(0xFF5372dc),
+            modifier = Modifier.padding(top = 16.dp, bottom = 8.dp)
+        )
+        RangeSlider(
+            value = viewModel.windSpeedFilterRange,
+            onValueChange = { viewModel.updateFilters(windSpeedRange = it) },
+            valueRange = 0f..100f,
+            colors = SliderDefaults.colors(
+                thumbColor = if (isNightTime) Color.White else Color(0xFF5372dc),
+                activeTrackColor = if (isNightTime) Color.White else Color(0xFF5372dc),
+                inactiveTrackColor = if (isNightTime) Color.Gray else Color(0xFF5372dc).copy(alpha = 0.3f)
+            )
+        )
+
+        // Humidity Range
+        Text(
+            text = "Độ ẩm (0% - 100%)",
+            fontSize = 16.sp,
+            color = if (isNightTime) Color.White else Color(0xFF5372dc),
+            modifier = Modifier.padding(top = 16.dp, bottom = 8.dp)
+        )
+        RangeSlider(
+            value = viewModel.humidityFilterRange,
+            onValueChange = { viewModel.updateFilters(humidityRange = it) },
+            valueRange = 0f..100f,
+            colors = SliderDefaults.colors(
+                thumbColor = if (isNightTime) Color.White else Color(0xFF5372dc),
+                activeTrackColor = if (isNightTime) Color.White else Color(0xFF5372dc),
+                inactiveTrackColor = if (isNightTime) Color.Gray else Color(0xFF5372dc).copy(alpha = 0.3f)
+            )
+        )
+
+        // Weather State Dropdown
+        Text(
+            text = "Trạng thái thời tiết",
+            fontSize = 16.sp,
+            color = if (isNightTime) Color.White else Color(0xFF5372dc),
+            modifier = Modifier.padding(top = 16.dp, bottom = 8.dp)
+        )
+        var expanded by remember { mutableStateOf(false) }
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(bottom = 24.dp)
+        ) {
+            OutlinedButton(
+                onClick = { expanded = true },
+                modifier = Modifier.fillMaxWidth(),
+                colors = ButtonDefaults.outlinedButtonColors(
+                    containerColor = if (isNightTime) Color(0xFF2D3748) else Color.White,
+                    contentColor = if (isNightTime) Color.White else Color(0xFF5372dc)
+                ),
+                border = BorderStroke(
+                    1.dp,
+                    if (isNightTime) Color.Gray else Color(0xFF5372dc).copy(alpha = 0.5f)
+                )
+            ) {
+                Text(
+                    text = viewModel.weatherStateFilter,
+                    color = if (isNightTime) Color.White else Color(0xFF5372dc),
+                    style = MaterialTheme.typography.bodyLarge.copy(
+                        color = if (isNightTime) Color.White else Color(0xFF5372dc)
+                    )
+                )
+            }
+            DropdownMenu(
+                expanded = expanded,
+                onDismissRequest = { expanded = false },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(if (isNightTime) Color(0xFF2D3748) else Color.White)
+            ) {
+                listOf("Tất cả", "Nắng", "Nhiều mây", "Mưa", "Sương mù", "Tuyết").forEach { state ->
+                    DropdownMenuItem(
+                        text = {
+                            Text(
+                                text = state,
+                                color = if (isNightTime) Color.White else Color(0xFF5372dc)
+                            )
+                        },
+                        onClick = {
+                            viewModel.updateFilters(weatherState = state)
+                            expanded = false
+                        }
+                    )
+                }
+            }
+        }
+
+        // Apply Filter Button
+        Button(
+            onClick = onBackClick,
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(56.dp),
+            colors = ButtonDefaults.buttonColors(
+                containerColor = if (isNightTime) Color.White else Color(0xFF5372dc),
+                contentColor = if (isNightTime) Color(0xFF2D3748) else Color.White
+            ),
+            shape = RoundedCornerShape(28.dp)
+        ) {
+            Text(
+                text = "Áp dụng bộ lọc",
+                fontSize = 16.sp,
+                fontWeight = FontWeight.Bold
             )
         }
     }

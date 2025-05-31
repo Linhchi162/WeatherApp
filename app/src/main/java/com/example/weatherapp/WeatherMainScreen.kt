@@ -2282,7 +2282,9 @@ fun WeatherMainScreen(
                     onMenuClick = { showSidebar = true },
                     isNightTime = isNightTime,
                     currentCityName = cities.getOrNull(pagerState.currentPage)?.name ?: "",
-                    scrollOffset = 0f
+                    scrollOffset = 0f,
+                    cityCount = cities.size,
+                    currentIndex = pagerState.currentPage
                 )
             },
             containerColor = Color.Transparent,
@@ -2465,7 +2467,8 @@ fun WeatherMainScreen(
                 onDismiss = { showSearchScreen = false },
                 onShowFilteredResults = { showFilteredCitiesScreen = true },
                 viewModel = viewModel,
-                temperatureUnit = temperatureUnit
+                temperatureUnit = temperatureUnit,
+                windSpeedUnit = windSpeedUnit
             )
         }
         
@@ -2481,8 +2484,8 @@ fun WeatherMainScreen(
                     showFilteredCitiesScreen = false 
                 },
                 viewModel = viewModel,
-                temperatureUnit = UnitConverter.TemperatureUnit.CELSIUS,
-                windSpeedUnit = UnitConverter.WindSpeedUnit.KMH,
+                temperatureUnit = temperatureUnit,
+                windSpeedUnit = windSpeedUnit,
                 isNightTime = isNightTime
             )
         }
@@ -2508,10 +2511,10 @@ fun WeatherMainScreen(
                 showSidebar = false
                 showCityManagementScreen = true
             },
-                            onFilterClick = {
-                    showSidebar = false
-                    showSearchScreen = true
-                }
+            onFilterClick = {
+                showSidebar = false
+                showSearchScreen = true
+            }
         )
 
         // Màn hình chi tiết thời tiết ngày
@@ -2551,27 +2554,33 @@ fun TopBar(
     onMenuClick: () -> Unit,
     isNightTime: Boolean,
     currentCityName: String = "",
-    scrollOffset: Float = 0f
+    scrollOffset: Float = 0f,
+    cityCount: Int,
+    currentIndex: Int
 ) {
     val iconColor = if (isNightTime) Color.White else Color(0xFF5372dc)
     val titleColor = if (isNightTime) Color.White else Color(0xFF5372dc)
-    
-    // Calculate title size based on scroll offset - tắt animation để tránh lag
-    val titleSize = 20f // Kích thước cố định
-    
+    val titleSize = 20f
     TopAppBar(
         title = { 
             if (currentCityName.isNotEmpty()) {
-                Text(
-                    text = currentCityName,
-                    color = titleColor,
-                    fontSize = titleSize.sp,
-                    fontWeight = FontWeight.Medium,
-                    maxLines = 1,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(start = 16.dp, top = 4.dp) // Tăng khoảng cách từ icon và nâng cao text
-                )
+                Column(modifier = Modifier.fillMaxWidth()) {
+                    Text(
+                        text = currentCityName,
+                        color = titleColor,
+                        fontSize = titleSize.sp,
+                        fontWeight = FontWeight.Medium,
+                        maxLines = 1,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(start = 16.dp, top = 4.dp)
+                    )
+                    CityTabIndicator(
+                        cityCount = cityCount,
+                        currentIndex = currentIndex,
+                        isNightTime = isNightTime
+                    )
+                }
             }
         },
         navigationIcon = {
@@ -2606,12 +2615,26 @@ fun CityManagementScreen(
     var isDragging by remember { mutableStateOf(false) }
     var draggedItemIndex by remember { mutableStateOf<Int?>(null) }
     var draggedOffset by remember { mutableStateOf(0f) }
+    var lastSwapIndex by remember { mutableStateOf<Int?>(null) }
+    
+    // Hàm tính toán vị trí mới khi thả item
+    fun calculateNewIndex(): Int? {
+        val from = draggedItemIndex ?: return null
+        val itemInfo = listState.layoutInfo.visibleItemsInfo.find { it.index == from } ?: return null
+        val itemHeight = itemInfo.size
+        val offsetY = itemInfo.offset + draggedOffset
+        val to = listState.layoutInfo.visibleItemsInfo.minByOrNull { info ->
+            val center = info.offset + info.size / 2
+            kotlin.math.abs(center - (offsetY + itemHeight / 2))
+        }?.index ?: from
+        return to
+    }
     
     // Theo dõi các thay đổi trong danh sách thành phố từ ViewModel
     LaunchedEffect(viewModel.citiesList) {
         cities = viewModel.citiesList
     }
-    // Dark mode detection (giống main screen)
+    // Khôi phục lại dark mode cho quản lý thành phố
     val isNightTime = remember {
         val currentHour = java.time.LocalTime.now().hour
         currentHour < 6 || currentHour >= 18
@@ -2682,22 +2705,64 @@ fun CityManagementScreen(
                                 }?.let { item ->
                                     isDragging = true
                                     draggedItemIndex = item.index
+                                    lastSwapIndex = item.index
                                 }
                             },
                             onDrag = { change, dragAmount ->
                                 change.consumeAllChanges()
                                 draggedOffset += dragAmount.y
                                 isDragging = true
+                                val from = draggedItemIndex
+                                if (from != null) {
+                                    val itemInfo = listState.layoutInfo.visibleItemsInfo.find { it.index == from }
+                                    if (itemInfo != null) {
+                                        val itemHeight = itemInfo.size
+                                        val currentTop = itemInfo.offset + draggedOffset
+                                        // Kéo xuống
+                                        val nextItem = listState.layoutInfo.visibleItemsInfo.find { it.index == from + 1 }
+                                        if (draggedOffset > 0 && nextItem != null) {
+                                            val nextCenter = nextItem.offset + nextItem.size / 2
+                                            if (currentTop + itemHeight > nextCenter) {
+                                                // Swap với item dưới
+                                                val mutable = cities.toMutableList()
+                                                val item = mutable.removeAt(from)
+                                                mutable.add(from + 1, item)
+                                                cities = mutable
+                                                draggedItemIndex = from + 1
+                                                draggedOffset -= nextItem.size
+                                            }
+                                        }
+                                        // Kéo lên
+                                        val prevItem = listState.layoutInfo.visibleItemsInfo.find { it.index == from - 1 }
+                                        if (draggedOffset < 0 && prevItem != null) {
+                                            val prevCenter = prevItem.offset + prevItem.size / 2
+                                            if (currentTop < prevCenter) {
+                                                // Swap với item trên
+                                                val mutable = cities.toMutableList()
+                                                val item = mutable.removeAt(from)
+                                                mutable.add(from - 1, item)
+                                                cities = mutable
+                                                draggedItemIndex = from - 1
+                                                draggedOffset += prevItem.size
+                                            }
+                                        }
+                                    }
+                                }
                             },
                             onDragEnd = {
+                                if (cities != viewModel.citiesList) {
+                                    viewModel.reorderCities(cities)
+                                }
                                 isDragging = false
                                 draggedItemIndex = null
                                 draggedOffset = 0f
+                                lastSwapIndex = null
                             },
                             onDragCancel = {
                                 isDragging = false
                                 draggedItemIndex = null
                                 draggedOffset = 0f
+                                lastSwapIndex = null
                             }
                         )
                     }
@@ -3843,203 +3908,29 @@ fun WeatherDetailCardPreview() {
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class) // Suppress experimental API warning
+// Thêm composable mới ở cuối file
 @Composable
-fun WeatherFilterScreen(
-    viewModel: WeatherViewModel,
-    onBackClick: () -> Unit,
-    isNightTime: Boolean = remember {
-        val currentHour = java.time.LocalTime.now().hour
-        currentHour < 6 || currentHour >= 18 // Đêm từ 18:00 đến 6:00
-    }
-) {
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(
-                brush = Brush.verticalGradient(
-                    colors = if (isNightTime) 
-                        listOf(Color(0xFF1A202C), Color(0xFF1A202C))
-                    else 
-                        listOf(Color(0xFFcbdfff), Color(0xFFfcdbf6))
-                )
-            )
-            .padding(16.dp)
-    ) {
-        // Header
+fun CityTabIndicator(cityCount: Int, currentIndex: Int, isNightTime: Boolean) {
+    if (cityCount > 1) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(bottom = 24.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
+                .padding(top = 2.dp, start = 18.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            IconButton(onClick = onBackClick) {
-                Icon(
-                    imageVector = Icons.Default.ArrowBack,
-                    contentDescription = "Quay lại",
-                    tint = if (isNightTime) Color.White else Color(0xFF5372dc)
+            for (i in 0 until cityCount) {
+                Box(
+                    modifier = Modifier
+                        .size(6.dp)
+                        .background(
+                            color = if (currentIndex == i) Color.White else Color.White.copy(alpha = 0.4f),
+                            shape = CircleShape
+                        )
                 )
-            }
-            Text(
-                text = "Lọc theo điều kiện thời tiết",
-                fontSize = 20.sp,
-                fontWeight = FontWeight.Bold,
-                color = if (isNightTime) Color.White else Color(0xFF5372dc)
-            )
-            Spacer(modifier = Modifier.width(48.dp))
-        }
-
-        // Country search field
-        OutlinedTextField(
-            value = viewModel.selectedFilterCountry,
-            onValueChange = { viewModel.updateFilters(country = it) },
-            placeholder = { 
-                Text(
-                    "Nhập tên quốc gia...",
-                    color = if (isNightTime) Color.Gray else Color.Gray
-                ) 
-            },
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(bottom = 16.dp),
-            colors = OutlinedTextFieldDefaults.colors(
-                focusedBorderColor = if (isNightTime) Color.White else Color(0xFF5372dc),
-                unfocusedBorderColor = if (isNightTime) Color.Gray else Color(0xFF5372dc).copy(alpha = 0.5f),
-                focusedTextColor = if (isNightTime) Color.White else Color.Black,
-                unfocusedTextColor = if (isNightTime) Color.White else Color.Black,
-                cursorColor = if (isNightTime) Color.White else Color(0xFF5372dc)
-            )
-        )
-
-        // Temperature Range
-        Text(
-            text = "Nhiệt độ (-20°C - 50°C)",
-            fontSize = 16.sp,
-            color = if (isNightTime) Color.White else Color(0xFF5372dc),
-            modifier = Modifier.padding(bottom = 8.dp)
-        )
-        RangeSlider(
-            value = viewModel.temperatureFilterRange,
-            onValueChange = { viewModel.updateFilters(temperatureRange = it) },
-            valueRange = -20f..50f,
-            colors = SliderDefaults.colors(
-                thumbColor = if (isNightTime) Color.White else Color(0xFF5372dc),
-                activeTrackColor = if (isNightTime) Color.White else Color(0xFF5372dc),
-                inactiveTrackColor = if (isNightTime) Color.Gray else Color(0xFF5372dc).copy(alpha = 0.3f)
-            )
-        )
-
-        // Wind Speed Range
-        Text(
-            text = "Tốc độ gió (0 - 100 km/h)",
-            fontSize = 16.sp,
-            color = if (isNightTime) Color.White else Color(0xFF5372dc),
-            modifier = Modifier.padding(top = 16.dp, bottom = 8.dp)
-        )
-        RangeSlider(
-            value = viewModel.windSpeedFilterRange,
-            onValueChange = { viewModel.updateFilters(windSpeedRange = it) },
-            valueRange = 0f..100f,
-            colors = SliderDefaults.colors(
-                thumbColor = if (isNightTime) Color.White else Color(0xFF5372dc),
-                activeTrackColor = if (isNightTime) Color.White else Color(0xFF5372dc),
-                inactiveTrackColor = if (isNightTime) Color.Gray else Color(0xFF5372dc).copy(alpha = 0.3f)
-            )
-        )
-
-        // Humidity Range
-        Text(
-            text = "Độ ẩm (0% - 100%)",
-            fontSize = 16.sp,
-            color = if (isNightTime) Color.White else Color(0xFF5372dc),
-            modifier = Modifier.padding(top = 16.dp, bottom = 8.dp)
-        )
-        RangeSlider(
-            value = viewModel.humidityFilterRange,
-            onValueChange = { viewModel.updateFilters(humidityRange = it) },
-            valueRange = 0f..100f,
-            colors = SliderDefaults.colors(
-                thumbColor = if (isNightTime) Color.White else Color(0xFF5372dc),
-                activeTrackColor = if (isNightTime) Color.White else Color(0xFF5372dc),
-                inactiveTrackColor = if (isNightTime) Color.Gray else Color(0xFF5372dc).copy(alpha = 0.3f)
-            )
-        )
-
-        // Weather State Dropdown
-        Text(
-            text = "Trạng thái thời tiết",
-            fontSize = 16.sp,
-            color = if (isNightTime) Color.White else Color(0xFF5372dc),
-            modifier = Modifier.padding(top = 16.dp, bottom = 8.dp)
-        )
-        var expanded by remember { mutableStateOf(false) }
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(bottom = 24.dp)
-        ) {
-            OutlinedButton(
-                onClick = { expanded = true },
-                modifier = Modifier.fillMaxWidth(),
-                colors = ButtonDefaults.outlinedButtonColors(
-                    containerColor = if (isNightTime) Color(0xFF2D3748) else Color.White,
-                    contentColor = if (isNightTime) Color.White else Color(0xFF5372dc)
-                ),
-                border = BorderStroke(
-                    1.dp,
-                    if (isNightTime) Color.Gray else Color(0xFF5372dc).copy(alpha = 0.5f)
-                )
-            ) {
-                Text(
-                    text = viewModel.weatherStateFilter,
-                    color = if (isNightTime) Color.White else Color(0xFF5372dc),
-                    style = MaterialTheme.typography.bodyLarge.copy(
-                        color = if (isNightTime) Color.White else Color(0xFF5372dc)
-                    )
-                )
-            }
-            DropdownMenu(
-                expanded = expanded,
-                onDismissRequest = { expanded = false },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .background(if (isNightTime) Color(0xFF2D3748) else Color.White)
-            ) {
-                listOf("Tất cả", "Nắng", "Nhiều mây", "Mưa", "Sương mù", "Tuyết").forEach { state ->
-                    DropdownMenuItem(
-                        text = { 
-                            Text(
-                                text = state,
-                                color = if (isNightTime) Color.White else Color(0xFF5372dc)
-                            ) 
-                        },
-                        onClick = {
-                            viewModel.updateFilters(weatherState = state)
-                            expanded = false
-                        }
-                    )
+                if (i < cityCount - 1) {
+                    Spacer(modifier = Modifier.width(4.dp))
                 }
             }
-        }
-
-        // Apply Filter Button
-        Button(
-            onClick = onBackClick,
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(56.dp),
-            colors = ButtonDefaults.buttonColors(
-                containerColor = if (isNightTime) Color.White else Color(0xFF5372dc),
-                contentColor = if (isNightTime) Color(0xFF2D3748) else Color.White
-            ),
-            shape = RoundedCornerShape(28.dp)
-        ) {
-            Text(
-                text = "Áp dụng bộ lọc",
-                fontSize = 16.sp,
-                fontWeight = FontWeight.Bold
-            )
         }
     }
 }
