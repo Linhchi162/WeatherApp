@@ -17,6 +17,10 @@ import java.time.format.DateTimeFormatter
 import android.util.Log
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.isActive
+import android.content.Context
+import android.content.SharedPreferences
+import com.google.gson.Gson
+import com.google.gson.reflect.TypeToken
 
 import kotlin.math.pow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -115,7 +119,8 @@ class WeatherViewModel(
     private val openMeteoService: OpenMeteoService, // Service for weather forecast
     private val airQualityService: AirQualityService, // Service for air quality
 
-    private val geoNamesService: GeoNamesService = RetrofitInstance.geoNamesApi // Service for GeoNames
+    private val geoNamesService: GeoNamesService = RetrofitInstance.geoNamesApi, // Service for GeoNames
+    private val appContext: Context? = null // Thêm context để lưu/đọc SharedPreferences
 ) : ViewModel() {
     // Hằng số cho debug log
     companion object {
@@ -173,6 +178,32 @@ class WeatherViewModel(
     var isFiltering by mutableStateOf(false)
         private set
 
+    private val gson = Gson()
+    private val PREFS_NAME = "weather_prefs"
+    private val CITIES_KEY = "cities_json"
+
+    private fun saveCitiesToPrefs() {
+        appContext?.let { ctx ->
+            val prefs = ctx.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            val json = gson.toJson(cities)
+            prefs.edit().putString(CITIES_KEY, json).apply()
+        }
+    }
+
+    private fun loadCitiesFromPrefs() {
+        appContext?.let { ctx ->
+            val prefs = ctx.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            val json = prefs.getString(CITIES_KEY, null)
+            if (!json.isNullOrEmpty()) {
+                val type = object : TypeToken<List<City>>() {}.type
+                val loaded = gson.fromJson<List<City>>(json, type)
+                if (loaded != null) {
+                    cities = loaded
+                }
+            }
+        }
+    }
+
     init {
         // Khởi tạo filteredCities ban đầu bằng toàn bộ cities (sẽ là rỗng)
         filteredCities = cities
@@ -187,6 +218,7 @@ class WeatherViewModel(
         
         // Fetch danh sách quốc gia từ API
         fetchCountriesFromAPI()
+        loadCitiesFromPrefs()
     }
 
     // Hàm thêm thành phố với tùy chọn thêm vào đầu danh sách
@@ -234,6 +266,7 @@ class WeatherViewModel(
             
             // Lưu danh sách thành phố mới vào DB/SharedPreferences nếu cần
             // saveCitiesToDb(updatedCities)
+            saveCitiesToPrefs()
         } else {
             Log.d("WeatherViewModel", "City already exists: ${city.name}")
             // Nếu thành phố đã tồn tại, có thể chỉ cần chuyển đến nó
@@ -312,6 +345,7 @@ class WeatherViewModel(
                 Log.w("WeatherViewModel", "City not found for deletion: $cityNameToDelete")
             }
 
+            saveCitiesToPrefs()
         }
     }
 
@@ -1545,6 +1579,7 @@ class WeatherViewModel(
             // }
             
             Log.d("WeatherViewModel", "Đã sắp xếp lại thứ tự thành phố thành công")
+            saveCitiesToPrefs()
         }
     }
 

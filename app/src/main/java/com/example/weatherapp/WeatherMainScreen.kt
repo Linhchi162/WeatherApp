@@ -150,11 +150,16 @@ import kotlin.math.roundToInt // Added for rounding
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
 import androidx.compose.foundation.gestures.scrollBy
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.util.VelocityTracker
 import androidx.compose.ui.zIndex
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import androidx.compose.material.icons.filled.ArrowDropDown
 
 // ========== Utility Functions ==========
 // Hàm kiểm tra mạng
@@ -323,6 +328,19 @@ fun formatTime(isoTime: String): String {
     } catch (e: Exception) {
         isoTime // Trả về chuỗi gốc nếu không parse được
     }
+}
+
+// Helper để loại bỏ tiền tố 'Quận', 'Huyện', 'Thị xã', 'Thành phố', 'Phường', 'Xã', 'Thị trấn' khỏi tên vị trí
+fun cleanLocationName(name: String): String {
+    val prefixes = listOf("Quận ", "Huyện ", "Thị xã ", "Thành phố ", "Phường ", "Xã ", "Thị trấn ")
+    var result = name
+    for (prefix in prefixes) {
+        if (result.startsWith(prefix, ignoreCase = true)) {
+            result = result.removePrefix(prefix)
+            break
+        }
+    }
+    return result.trim()
 }
 
 // ========== Reusable UI Components ==========
@@ -1220,10 +1238,27 @@ fun getTilesForViewport(bounds: LatLngBounds, zoom: Int): List<Pair<Int, Int>> {
     val tiles = mutableListOf<Pair<Int, Int>>()
     val n = 1 shl zoom
 
-    for (x in minX..maxX) {
-        for (y in minY..maxY) {
-            val wrappedX = (x + n) % n // Xử lý vòng quanh kinh tuyến 180
-            tiles.add(Pair(wrappedX, y))
+    if (maxX >= minX) {
+        // Bình thường
+        for (x in minX..maxX) {
+            for (y in minY..maxY) {
+                val wrappedX = (x + n) % n
+                tiles.add(Pair(wrappedX, y))
+            }
+        }
+    } else {
+        // Qua kinh tuyến đổi ngày, chia làm 2 đoạn
+        for (x in minX until n) {
+            for (y in minY..maxY) {
+                val wrappedX = (x + n) % n
+                tiles.add(Pair(wrappedX, y))
+            }
+        }
+        for (x in 0..maxX) {
+            for (y in minY..maxY) {
+                val wrappedX = (x + n) % n
+                tiles.add(Pair(wrappedX, y))
+            }
         }
     }
 
@@ -1388,7 +1423,8 @@ private fun SimpleWeatherMap(
         val activity = context as? ComponentActivity
         activity?.let {
             ViewModelProvider(it, WeatherViewModelFactory(
-                WeatherDatabase.getDatabase(context).weatherDao()
+                context = context,
+                weatherDao = WeatherDatabase.getDatabase(context).weatherDao()
             ))[WeatherViewModel::class.java]
         }
     }
@@ -1635,10 +1671,29 @@ fun FullScreenWeatherRadar(
                 )
             )
     ) {
-        Column(modifier = Modifier.fillMaxSize()) {
-            // Top Bar
+        // Bản đồ radar full màn hình và TopBar
+        Box(modifier = Modifier.fillMaxSize()) {
+            // Main Content (bản đồ)
+            Box(modifier = Modifier.fillMaxSize()) {
+                if (hasError) {
+                    // ... giữ nguyên phần lỗi ...
+                } else {
+                    FullScreenWeatherMap(
+                        city = city,
+                        selectedLayer = selectedLayer,
+                        zoom = currentZoom,
+                        onLoadingChange = { isLoading = it },
+                        onError = { hasError = true },
+                        onZoomChange = { currentZoom = it }
+                    )
+                    if (isLoading) {
+                        // ... giữ nguyên overlay loading ...
+                    }
+                }
+            }
+            // TopBar phía trên cùng
             TopAppBar(
-                title = { 
+                title = {
                     Column {
                         Text("Radar Thời Tiết", color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.Bold)
                         Text(city.name, color = Color.White.copy(alpha = 0.8f), fontSize = 14.sp)
@@ -1653,165 +1708,56 @@ fun FullScreenWeatherRadar(
                         )
                     }
                 },
+                actions = {
+                    var showLayerMenu by remember { mutableStateOf(false) }
+                    val current = weatherLayers.find { it.first == selectedLayer }
+                    TextButton(onClick = { showLayerMenu = true }) {
+                        Text(text = current?.second ?: "Lớp phủ", color = Color.White, fontWeight = FontWeight.Bold)
+                        Icon(
+                            imageVector = Icons.Default.ArrowDropDown,
+                            contentDescription = "Mở menu lớp phủ",
+                            tint = Color.White
+                        )
+                    }
+                    DropdownMenu(
+                        expanded = showLayerMenu,
+                        onDismissRequest = { showLayerMenu = false }
+                    ) {
+                        weatherLayers.forEach { (layer, label, _) ->
+                            DropdownMenuItem(
+                                text = {
+                                    Text(
+                                        text = label,
+                                        color = if (selectedLayer == layer) Color(0xFF5372dc) else Color.Black,
+                                        fontWeight = if (selectedLayer == layer) FontWeight.Bold else FontWeight.Normal
+                                    )
+                                },
+                                onClick = {
+                                    selectedLayer = layer
+                                    hasError = false
+                                    showLayerMenu = false
+                                },
+                                modifier = if (selectedLayer == layer) Modifier.background(Color(0xFFE3ECFF)) else Modifier
+                            )
+                        }
+                    }
+                },
                 colors = TopAppBarDefaults.topAppBarColors(
                     containerColor = Color(0xFF5372dc).copy(alpha = 0.9f)
-                )
+                ),
+                modifier = Modifier.align(Alignment.TopCenter)
             )
-
-            // Layer Selection
-            LazyRow(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(16.dp),
-                horizontalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                items(weatherLayers) { (layer, label, emoji) ->
-                    val isSelected = selectedLayer == layer
-                    Card(
-                        modifier = Modifier
-                            .clickable { 
-                                selectedLayer = layer
-                                hasError = false
-                            },
-                        colors = CardDefaults.cardColors(
-                            containerColor = if (isSelected) Color(0xFF5372dc) else Color.White.copy(alpha = 0.8f)
-                        ),
-                        shape = RoundedCornerShape(20.dp)
-                    ) {
-                        Row(
-                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Text(text = emoji, fontSize = 16.sp)
-                            Spacer(modifier = Modifier.width(4.dp))
-                            Text(
-                                text = label,
-                                color = if (isSelected) Color.White else Color(0xFF5372dc),
-                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
-                                fontSize = 14.sp
-                            )
-                        }
-                    }
+            // Overlay ColorScaleBar ở dưới cùng, căn giữa, chỉ khi không lỗi
+            if (!hasError) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(bottom = 24.dp),
+                    contentAlignment = Alignment.BottomCenter
+                ) {
+                    ColorScaleBar(selectedLayer = selectedLayer)
                 }
             }
-
-            // Main Content
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .weight(1f)
-                    .padding(horizontal = 16.dp)
-            ) {
-                if (hasError) {
-                    // Error state
-                    Card(
-                        modifier = Modifier.fillMaxSize(),
-                        colors = CardDefaults.cardColors(
-                            containerColor = Color.White.copy(alpha = 0.9f)
-                        )
-                    ) {
-                        Column(
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .padding(32.dp),
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                            verticalArrangement = Arrangement.Center
-                        ) {
-                            Icon(
-                                painter = painterResource(id = R.drawable.cloudy),
-                                contentDescription = "Lỗi",
-                                modifier = Modifier.size(64.dp),
-                                tint = Color(0xFF5372dc).copy(alpha = 0.7f)
-                            )
-                            Spacer(modifier = Modifier.height(16.dp))
-                            Text(
-                                text = "Không thể tải dữ liệu radar",
-                                fontSize = 18.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = Color(0xFF5372dc)
-                            )
-                            Spacer(modifier = Modifier.height(8.dp))
-                            Text(
-                                text = "Vui lòng kiểm tra kết nối mạng và thử lại",
-                                fontSize = 14.sp,
-                                color = Color(0xFF5372dc).copy(alpha = 0.8f),
-                                textAlign = TextAlign.Center
-                            )
-                            Spacer(modifier = Modifier.height(24.dp))
-                            Button(
-                                onClick = { hasError = false },
-                                colors = ButtonDefaults.buttonColors(
-                                    containerColor = Color(0xFF5372dc)
-                                )
-                            ) {
-                                Text("Thử lại", color = Color.White)
-                            }
-                        }
-                    }
-                } else {
-                    // Radar Map
-                    Card(
-                        modifier = Modifier.fillMaxSize(),
-                        colors = CardDefaults.cardColors(
-                            containerColor = Color.White.copy(alpha = 0.9f)
-                        )
-                    ) {
-                        Box(modifier = Modifier.fillMaxSize()) {
-                            FullScreenWeatherMap(
-                                city = city,
-                                selectedLayer = selectedLayer,
-                                zoom = currentZoom,
-                                onLoadingChange = { isLoading = it },
-                                onError = { hasError = true },
-                                onZoomChange = { currentZoom = it }
-                            )
-                            
-                            // Loading overlay
-                            if (isLoading) {
-                                Box(
-                                    modifier = Modifier
-                                        .fillMaxSize()
-                                        .background(Color.Black.copy(alpha = 0.3f)),
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    Card(
-                                        colors = CardDefaults.cardColors(
-                                            containerColor = Color.White
-                                        )
-                                    ) {
-                                        Row(
-                                            modifier = Modifier.padding(16.dp),
-                                            verticalAlignment = Alignment.CenterVertically
-                                        ) {
-                                            CircularProgressIndicator(
-                                                color = Color(0xFF5372dc),
-                                                modifier = Modifier.size(24.dp)
-                                            )
-                                            Spacer(modifier = Modifier.width(12.dp))
-                                            Text(
-                                                text = "Đang tải dữ liệu radar...",
-                                                color = Color(0xFF5372dc)
-                                            )
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-
-                // Color Scale Bar
-                if (!hasError) {
-                    ColorScaleBar(
-                        selectedLayer = selectedLayer,
-                        modifier = Modifier
-                            .align(Alignment.CenterStart)
-                            .padding(start = 16.dp)
-                    )
-                }
-            }
-
-
         }
     }
 }
@@ -1830,102 +1776,80 @@ private fun FullScreenWeatherMap(
     var mapView by remember { mutableStateOf<MapView?>(null) }
     var lastLoadedLayer by remember { mutableStateOf("") }
     var lastLoadedZoom by remember { mutableStateOf(0) }
+    var lastLoadedBounds by remember { mutableStateOf<LatLngBounds?>(null) }
+    val currentLayer by rememberUpdatedState(selectedLayer)
 
-    // Load tiles function - enhanced for full screen
-    val loadTiles = remember(city.latitude, city.longitude) {
-        { layer: String, targetZoom: Int ->
-            if (googleMap == null || (layer == lastLoadedLayer && targetZoom == lastLoadedZoom)) return@remember
-            
-            coroutineScope.launch {
-                onLoadingChange(true)
-                
-                try {
-                    withContext(Dispatchers.IO) {
-                        val (centerX, centerY) = latLonToTileXY(city.latitude, city.longitude, targetZoom)
-                        val tilesToLoad = mutableListOf<Triple<Int, Int, Bitmap?>>()
-                        
-                        // Load more tiles for focused view
-                        val range = when (targetZoom) {
-                            6, 7 -> 2
-                            8, 9 -> 1
-                            else -> 2
-                        }
-                        
-                        for (dx in -range..range) {
-                            for (dy in -range..range) {
-                                val xTile = centerX + dx
-                                val yTile = centerY + dy
-                                
-                                val n = 1 shl targetZoom
-                                val wrappedX = ((xTile % n) + n) % n
-                                
-                                if (yTile >= 0 && yTile < n) {
-                                    val url = "https://tile.openweathermap.org/map/$layer/$targetZoom/$wrappedX/$yTile.png?appid=960b4897d630b53c8faeb909817bf31a"
-                                    
-                                    val bitmap = try {
-                                        URL(url).openConnection().apply {
-                                            connectTimeout = 1500
-                                            readTimeout = 1500
-                                        }.getInputStream().use { BitmapFactory.decodeStream(it) }
-                                    } catch (e: Exception) {
-                                        null
-                                    }
-                                    
-                                    if (bitmap != null) {
-                                        tilesToLoad.add(Triple(wrappedX, yTile, bitmap))
-                                    }
-                                }
-                            }
-                        }
-                        
-                        withContext(Dispatchers.Main) {
-                            if (tilesToLoad.isNotEmpty() && googleMap != null) {
-                                googleMap!!.clear()
-                                
-                                val transparency = when (layer) {
-                                    "precipitation" -> 0.0f
-                                    "clouds" -> 0.2f
-                                    "wind" -> 0.4f
-                                    "temp" -> 0.3f
-                                    else -> 0.3f
-                                }
-                                
-                                tilesToLoad.forEach { (xTile, yTile, bitmap) ->
-                                    bitmap?.let {
-                                        val bounds = tileToLatLonBounds(xTile, yTile, targetZoom)
-                                        googleMap!!.addGroundOverlay(
-                                            GroundOverlayOptions()
-                                                .image(BitmapDescriptorFactory.fromBitmap(it))
-                                                .positionFromBounds(bounds)
-                                                .transparency(transparency)
-                                        )
-                                    }
-                                }
-                                
-                                lastLoadedLayer = layer
-                                lastLoadedZoom = targetZoom
-                                onLoadingChange(false)
-                            } else {
-                                onError()
-                            }
+    // Load tiles theo bounds và zoom hiện tại
+    fun loadTilesForBounds(layer: String, bounds: LatLngBounds, targetZoom: Int) {
+        if (googleMap == null) return
+        coroutineScope.launch {
+            onLoadingChange(true)
+            try {
+                withContext(Dispatchers.IO) {
+                    val tiles = getTilesForViewport(bounds, targetZoom)
+                    val jobs = tiles.map { (x, y) ->
+                        async {
+                            val url = "https://tile.openweathermap.org/map/$layer/$targetZoom/$x/$y.png?appid=960b4897d630b53c8faeb909817bf31a"
+                            val bitmap = try {
+                                URL(url).openConnection().apply {
+                                    connectTimeout = 1200
+                                    readTimeout = 1200
+                                }.getInputStream().use { BitmapFactory.decodeStream(it) }
+                            } catch (e: Exception) { null }
+                            Triple(x, y, bitmap)
                         }
                     }
-                } catch (e: Exception) {
+                    val results = jobs.awaitAll()
                     withContext(Dispatchers.Main) {
-                        onLoadingChange(false)
-                        onError()
+                        if (results.isNotEmpty() && googleMap != null) {
+                            googleMap!!.clear()
+                            // Thêm marker cho thành phố hiện tại
+                            val cityLocation = LatLng(city.latitude, city.longitude)
+                            googleMap!!.addMarker(
+                                MarkerOptions()
+                                    .position(cityLocation)
+                                    .icon(BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_RED))
+                                    .title(city.name)
+                                    .anchor(0.5f, 0.5f)
+                                    .zIndex(1.0f)
+                            )
+                            val transparency = when (layer) {
+                                "precipitation" -> 0.0f
+                                "clouds" -> 0.2f
+                                "wind" -> 0.4f
+                                "temp" -> 0.3f
+                                else -> 0.3f
+                            }
+                            for (result in results) {
+                                val (xTile, yTile, bitmap) = result
+                                if (bitmap != null) {
+                                    val tileBounds = tileToLatLonBounds(xTile, yTile, targetZoom)
+                                    googleMap!!.addGroundOverlay(
+                                        GroundOverlayOptions()
+                                            .image(BitmapDescriptorFactory.fromBitmap(bitmap))
+                                            .positionFromBounds(tileBounds)
+                                            .transparency(transparency)
+                                    )
+                                }
+                            }
+                            lastLoadedLayer = layer
+                            lastLoadedZoom = targetZoom
+                            lastLoadedBounds = bounds
+                            onLoadingChange(false)
+                        } else {
+                            onError()
+                        }
                     }
+                }
+            } catch (e: Exception) {
+                withContext(Dispatchers.Main) {
+                    onLoadingChange(false)
+                    onError()
                 }
             }
         }
     }
 
-    LaunchedEffect(selectedLayer, zoom) {
-        if (googleMap != null) {
-            loadTiles(selectedLayer, zoom)
-        }
-    }
-    
     DisposableEffect(Unit) {
         onDispose {
             googleMap?.clear()
@@ -1946,30 +1870,41 @@ private fun FullScreenWeatherMap(
                     map.moveCamera(
                         CameraUpdateFactory.newLatLngZoom(cityLocation, zoom.toFloat())
                     )
-
                     map.uiSettings.isZoomControlsEnabled = true
                     map.uiSettings.isScrollGesturesEnabled = true
                     map.uiSettings.isZoomGesturesEnabled = true
                     map.uiSettings.isRotateGesturesEnabled = true
                     map.uiSettings.isCompassEnabled = true
                     map.mapType = GoogleMap.MAP_TYPE_NORMAL
-
-                    map.setOnCameraIdleListener {
-                        val newZoom = map.cameraPosition.zoom.toInt().coerceIn(6, 12)
-                        if (newZoom != zoom) {
-                            onZoomChange(newZoom)
-                        }
-                    }
-
                     googleMap = map
                     mapView = this
-                    
-                    loadTiles(selectedLayer, zoom)
+                    // Lần đầu load
+                    val initialBounds = map.projection.visibleRegion.latLngBounds
+                    loadTilesForBounds(selectedLayer, initialBounds, zoom)
+                    // Lắng nghe camera idle để load tile động
+                    map.setOnCameraIdleListener {
+                        val bounds = map.projection.visibleRegion.latLngBounds
+                        val newZoom = map.cameraPosition.zoom.toInt().coerceIn(2, 12)
+                        onZoomChange(newZoom)
+                        // Dùng currentLayer thay vì selectedLayer
+                        if (currentLayer != lastLoadedLayer || newZoom != lastLoadedZoom || lastLoadedBounds == null || !lastLoadedBounds!!.contains(bounds.northeast) || !lastLoadedBounds!!.contains(bounds.southwest)) {
+                            loadTilesForBounds(currentLayer, bounds, newZoom)
+                        }
+                    }
                 }
             }
         },
         update = { /* No updates needed */ }
     )
+
+    // Reload tile khi đổi lớp phủ
+    LaunchedEffect(selectedLayer) {
+        googleMap?.let { map ->
+            val bounds = map.projection.visibleRegion.latLngBounds
+            val currentZoom = map.cameraPosition.zoom.toInt().coerceIn(2, 12)
+            loadTilesForBounds(selectedLayer, bounds, currentZoom)
+        }
+    }
 }
 
 @Composable
@@ -1977,136 +1912,111 @@ private fun ColorScaleBar(
     selectedLayer: String,
     modifier: Modifier = Modifier
 ) {
-    val (colors, values, unit) = when (selectedLayer) {
-        "precipitation" -> Triple(
+    val (colors, values, unit, label) = when (selectedLayer) {
+        "precipitation" -> Quadruple(
             listOf(
-                Color(0xFF87CEEB),
-                Color(0xFF4169E1), 
-                Color(0xFF1E90FF),
-                Color(0xFF0000FF),
-                Color(0xFF8B0000),
-                Color(0xFFFF0000)
+                Color(0xFFB4F0FF), Color(0xFF4FC3F7), Color(0xFF1976D2), Color(0xFF1565C0), Color(0xFFB71C1C)
             ),
             listOf("0", "2", "5", "10", "20", "50"),
-            "mm/h"
+            "mm/h",
+            "Mưa, mm/h"
         )
-        "clouds" -> Triple(
+        "clouds" -> Quadruple(
             listOf(
-                Color(0xFFFFFFFF),
-                Color(0xFFE6E6FA),
-                Color(0xFFD3D3D3),
-                Color(0xFFA9A9A9),
-                Color(0xFF696969),
-                Color(0xFF2F4F4F)
+                Color(0xFFFFFFFF), Color(0xFFD3D3D3), Color(0xFFA9A9A9), Color(0xFF696969), Color(0xFF2F4F4F)
             ),
-            listOf("0", "20", "40", "60", "80", "100"),
-            "%"
+            listOf("0", "25", "50", "75", "100"),
+            "%",
+            "Mây, %"
         )
-        "wind" -> Triple(
+        "wind" -> Quadruple(
             listOf(
-                Color(0xFF90EE90),
-                Color(0xFFFFFF00),
-                Color(0xFFFFD700),
-                Color(0xFFFFA500),
-                Color(0xFFFF4500),
-                Color(0xFFFF0000)
+                Color(0xFFB2EBF2), Color(0xFF4FC3F7), Color(0xFF1976D2), Color(0xFFFFF176), Color(0xFFFFA726), Color(0xFFD32F2F)
             ),
             listOf("0", "5", "10", "15", "25", "35"),
-            "km/h"
+            "km/h",
+            "Gió, km/h"
         )
-        "temp" -> Triple(
+        "temp" -> Quadruple(
             listOf(
-                Color(0xFF0000FF),
-                Color(0xFF0080FF),
-                Color(0xFF00FFFF),
-                Color(0xFF00FF00),
-                Color(0xFFFFFF00),
-                Color(0xFFFF8000),
-                Color(0xFFFF0000)
+                Color(0xFF6E40AA), Color(0xFF2A6BD4), Color(0xFF00A6FF), Color(0xFF00FFEA), Color(0xFF7FFF00), Color(0xFFFFF500), Color(0xFFFFAA00), Color(0xFFFF0000)
             ),
-            listOf("-10", "0", "10", "20", "30", "40"),
-            "°C"
+            listOf("-40", "-20", "0", "20", "40"),
+            "°C",
+            "Nhiệt độ, °C"
         )
-        else -> Triple(
+        else -> Quadruple(
             listOf(Color.Gray),
             listOf("0"),
+            "",
             ""
         )
     }
-
     Card(
-        modifier = modifier,
+        modifier = modifier
+            .width(226.dp)
+            .wrapContentHeight(),
         colors = CardDefaults.cardColors(
-            containerColor = Color.White.copy(alpha = 0.9f)
+            containerColor = Color.White
         ),
-        shape = RoundedCornerShape(8.dp)
+        shape = RoundedCornerShape(10.dp),
+        elevation = CardDefaults.cardElevation(6.dp)
     ) {
         Column(
-            modifier = Modifier.padding(8.dp),
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            // Unit label
-            if (unit.isNotEmpty()) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
                 Text(
-                    text = unit,
-                    fontSize = 11.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = Color(0xFF5372dc),
-                    modifier = Modifier.padding(bottom = 4.dp)
+                    text = label,
+                    fontSize = 13.sp,
+                    color = Color(0xFF222222),
+                    fontWeight = FontWeight.Medium,
+                    modifier = Modifier.weight(1f)
                 )
             }
-            
-            // Color gradient bar with values
+            Spacer(modifier = Modifier.height(2.dp))
+            // Box width 200.dp, căn giữa trong Card
             Box(
                 modifier = Modifier
-                    .width(50.dp)
-                    .height(200.dp)
+                    .width(200.dp)
+                    .align(Alignment.CenterHorizontally)
             ) {
-                // Background gradient
-                Canvas(
-                    modifier = Modifier
-                        .width(20.dp)
-                        .height(200.dp)
-                        .align(Alignment.CenterStart)
+                Column(
+                    modifier = Modifier.align(Alignment.Center)
                 ) {
-                    val barHeight = size.height
-                    val segmentHeight = barHeight / (colors.size - 1).coerceAtLeast(1).toFloat()
-                    
-                    for (i in 0 until colors.size - 1) {
-                        val startY = i.toFloat() * segmentHeight
-                        val endY = (i + 1).toFloat() * segmentHeight
-                        
-                        drawRect(
-                            brush = Brush.verticalGradient(
-                                colors = listOf(colors[i], colors[i + 1]),
-                                startY = 0f,
-                                endY = segmentHeight
-                            ),
-                            topLeft = Offset(0f, startY),
-                            size = Size(size.width, segmentHeight)
-                        )
-                    }
-                    
-                    // Border
-                    drawRect(
-                        color = Color.Gray.copy(alpha = 0.5f),
-                        topLeft = Offset.Zero,
-                        size = size,
-                        style = Stroke(width = 1.dp.toPx())
-                    )
-                }
-                
-                // Value labels
-                values.forEachIndexed { index, value ->
-                    val yPosition = ((index.toFloat() / (values.size - 1).coerceAtLeast(1)) * 200f).dp
-                    Text(
-                        text = value,
-                        fontSize = 10.sp,
-                        color = Color(0xFF5372dc),
-                        fontWeight = FontWeight.Medium,
+                    // Box chứa các số đo, width nhỏ hơn, căn giữa
+                    Box(
                         modifier = Modifier
-                            .align(Alignment.CenterStart)
-                            .offset(x = 25.dp, y = yPosition - 6.dp)
+                            .width(180.dp)
+                            .align(Alignment.CenterHorizontally)
+                    ) {
+                        values.forEachIndexed { index, value ->
+                            val xPosition = ((index.toFloat() / (values.size - 1).coerceAtLeast(1)) * 180f).dp
+                            Text(
+                                text = value,
+                                fontSize = 10.sp,
+                                color = Color(0xFF5372dc),
+                                fontWeight = FontWeight.Medium,
+                                modifier = Modifier
+                                    .align(Alignment.TopStart)
+                                    .offset(x = xPosition - 10.dp, y = 0.dp)
+                            )
+                        }
+                    }
+                    // Thanh màu giữ nguyên width
+                    Box(
+                        modifier = Modifier
+                            .width(200.dp)
+                            .height(10.dp)
+                            .clip(RoundedCornerShape(5.dp))
+                            .background(
+                                brush = Brush.horizontalGradient(colors)
+                            )
+                            .align(Alignment.CenterHorizontally)
                     )
                 }
             }
@@ -2114,7 +2024,8 @@ private fun ColorScaleBar(
     }
 }
 
-
+// Helper data class
+private data class Quadruple<A, B, C, D>(val first: A, val second: B, val third: C, val fourth: D)
 
 // ========== Main Screen Composable ==========
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalPagerApi::class)
@@ -2125,6 +2036,7 @@ fun WeatherMainScreen(
         val context = LocalContext.current
         val factory = remember(context) {
             WeatherViewModelFactory(
+                context = context,
                 weatherDao = WeatherDatabase.getDatabase(context).weatherDao(),
                 openMeteoService = RetrofitInstance.api,
                 airQualityService = RetrofitInstance.airQualityApi,
@@ -2566,7 +2478,7 @@ fun TopBar(
             if (currentCityName.isNotEmpty()) {
                 Column(modifier = Modifier.fillMaxWidth()) {
                     Text(
-                        text = currentCityName,
+                        text = cleanLocationName(currentCityName),
                         color = titleColor,
                         fontSize = titleSize.sp,
                         fontWeight = FontWeight.Medium,

@@ -382,6 +382,7 @@ class MainActivity : ComponentActivity() {
             val viewModel: WeatherViewModel by viewModels(
                 factoryProducer = {
                     WeatherViewModelFactory(
+                        context = this@MainActivity,
                         weatherDao = weatherDao,
                         openMeteoService = RetrofitInstance.api,
                         airQualityService = RetrofitInstance.airQualityApi,

@@ -1,5 +1,6 @@
 package com.example.weatherapp
 
+import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 
@@ -7,6 +8,7 @@ import androidx.lifecycle.ViewModelProvider
  * Factory for creating WeatherViewModel instances with necessary dependencies.
  */
 class WeatherViewModelFactory(
+    private val context: Context,
     private val weatherDao: WeatherDao,
     private val openMeteoService: OpenMeteoService = RetrofitInstance.api,
     private val airQualityService: AirQualityService = RetrofitInstance.airQualityApi,
@@ -21,7 +23,8 @@ class WeatherViewModelFactory(
                 weatherDao,
                 openMeteoService,
                 airQualityService,
-                geoNamesService
+                geoNamesService,
+                context.applicationContext
             ) as T
         }
         throw IllegalArgumentException("Unknown ViewModel class: ${modelClass.name}")
