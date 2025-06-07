@@ -27,6 +27,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import com.google.android.gms.maps.model.LatLng
 import com.google.android.gms.maps.model.LatLngBounds
+import android.widget.Toast
 
 
 data class City(
@@ -617,41 +618,33 @@ class WeatherViewModel(
             var airQualityResponse: AirQualityResponse? = null
             var fetchError: Exception? = null
 
-            try {
-                // Launch both API calls concurrently using async
-                val weatherDeferred = async(Dispatchers.IO) {
-                    Log.d("WeatherViewModel", "Fetching weather for $cityName (Lat: $latitude, Lon: $longitude)")
-                    openMeteoService.getWeather(latitude, longitude)
-                }
-                val airQualityDeferred = async(Dispatchers.IO) {
-                    Log.d("WeatherViewModel", "Fetching air quality for $cityName (Lat: $latitude, Lon: $longitude)")
-                    airQualityService.getAirQuality(latitude, longitude) // Gọi hàm mới qua service mới
-                }
-
-                // Await results from both calls
-                weatherResponse = weatherDeferred.await()
-                airQualityResponse = airQualityDeferred.await()
-                Log.i("WeatherViewModel", "Finished fetching both APIs for $cityName")
-
-            } catch (e: CancellationException) {
-                Log.i("WeatherViewModel", "Fetch job cancelled for $cityName")
-                // If cancelled, we might want to revert loading state if we set it earlier
-                // Or just let the UI handle the potentially empty state
-                return@launch // Exit the coroutine
-            } catch (e: Exception) {
-                // Catch errors from either API call
-                Log.e("WeatherViewModel", "Error fetching data for $cityName: ${e.message}", e)
-                fetchError = e // Store the error
+            val weatherResult = runCatching {
+                openMeteoService.getWeather(latitude, longitude)
+            }
+            val airQualityResult = runCatching {
+                airQualityService.getAirQuality(latitude, longitude)
+            }
+            if (weatherResult.isSuccess) {
+                weatherResponse = weatherResult.getOrNull()
+            } else {
+                fetchError = weatherResult.exceptionOrNull() as? Exception
+            }
+            if (airQualityResult.isSuccess) {
+                airQualityResponse = airQualityResult.getOrNull()
+            } else if (fetchError == null) {
+                fetchError = airQualityResult.exceptionOrNull() as? Exception
             }
 
             // --- Data Processing and State Update ---
-
-            // Process results and update the state on the Main thread
             withContext(Dispatchers.Main) {
                 val newState = processApiResponse(cityName, weatherResponse, airQualityResponse, fetchError)
-                // Update the map with the new state
                 weatherDataMap = weatherDataMap.toMutableMap().apply {
                     put(cityName, newState)
+                }
+                if (fetchError != null) {
+                    appContext?.let { ctx ->
+                        Toast.makeText(ctx, "Không có kết nối mạng hoặc lỗi dữ liệu: ${fetchError?.localizedMessage}", Toast.LENGTH_LONG).show()
+                    }
                 }
                 Log.d("WeatherViewModel", "Updated state for $cityName. AQI: ${newState.currentAqi}, Error: ${newState.errorMessage}")
             }
@@ -792,10 +785,10 @@ class WeatherViewModel(
         // Final error handling
         if (error != null && !weatherDbSaved && newState.currentAqi == null) {
             // Only show fetch error if nothing was successful
-            newState.errorMessage = "Lỗi tải dữ liệu: ${error.message}"
+            newState.errorMessage = "Không có kết nối internet"
         } else if (newState.timeList.isEmpty() && newState.dailyTimeList.isEmpty() && newState.currentAqi == null && error == null) {
             // No error, but no data
-            newState.errorMessage = "Không có dữ liệu."
+            newState.errorMessage = "Không có kết nối internet"
         } else if (error == null && (newState.timeList.isNotEmpty() || newState.dailyTimeList.isNotEmpty() || newState.currentAqi != null)) {
             // Has some data and no fetch error
             newState.errorMessage = null // Clear previous errors if data is now available
@@ -853,6 +846,12 @@ class WeatherViewModel(
         
         // Set the current city immediately
         currentCity = cityName
+        
+        // Lưu currentCity vào SharedPreferences nếu có context
+        appContext?.let { ctx ->
+            val prefs = ctx.getSharedPreferences("weather_prefs", Context.MODE_PRIVATE)
+            prefs.edit().putString("current_city", cityName).apply()
+        }
         
         // If there's no data for this city yet or it's stale, fetch it
         val currentData = weatherDataMap[cityName]

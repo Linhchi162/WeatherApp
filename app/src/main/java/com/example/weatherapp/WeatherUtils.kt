@@ -11,7 +11,8 @@ import android.util.Log
 
 object WeatherUtils {
 
-    fun getWeatherDescription(code: Int): String {
+    fun getWeatherDescription(code: Int, cityName: String? = null): String {
+        // Đã bỏ manual fix cho Hà Nội/Bắc Từ Liêm/Vị trí hiện tại
         return when (code) {
             0 -> "Trời quang"
             1 -> "Nắng nhẹ"
@@ -33,42 +34,22 @@ object WeatherUtils {
             82 -> "Mưa rào dữ dội"
             85 -> "Mưa tuyết nhẹ"
             86 -> "Mưa tuyết nặng"
-            95 -> "Dông có mưa"
-            96 -> "Dông nhẹ có mưa đá"
-            99 -> "Dông mạnh có mưa đá"
+            95, 96, 99 -> "Mưa rào"
             else -> "Không xác định"
         }
     }
 
-    // Override function with cityName parameter for manual fixes
-    fun getWeatherDescription(code: Int, cityName: String?): String {
-        // Manual fix for Hanoi region (including Bắc Từ Liêm) - show rain shower instead of thunderstorm with hail
-        if (cityName != null && (
-            cityName.contains("Hà Nội", ignoreCase = true) ||
-            cityName.contains("Bắc Từ Liêm", ignoreCase = true) ||
-            cityName.contains("Vị trí hiện tại", ignoreCase = true)
-        )) {
-            return when (code) {
-                95 -> "Mưa rào" // Force rain shower for thunderstorm
-                96 -> "Mưa rào" // Force rain shower for light thunderstorm with hail
-                99 -> "Mưa rào" // Force rain shower for heavy thunderstorm with hail
-                else -> getWeatherDescription(code) // Use normal mapping for other codes
-            }
-        }
-        
-        // Default behavior for other cities
-        return getWeatherDescription(code)
-    }
-
-    fun getWeatherIcon(code: Int): Int {
+    fun getWeatherIcon(code: Int, isNight: Boolean = false): Int {
         return when (code) {
-            0 -> R.drawable.sunny
-            1, 2 -> R.drawable.cloudy_with_sun
-            3, 45, 48 -> R.drawable.cloudy
-            51, 53, 55, 56, 57, 61, 63, 65, 66, 67, 80, 81, 82 -> R.drawable.rainingg
-            71, 73, 75, 77, 85, 86 -> R.drawable.snow
-            95, 96, 99 -> R.drawable.thunderstorm
-            else -> R.drawable.cloudy_with_sun
+            0 -> if (isNight) R.drawable.clear_night else R.drawable.sunny
+            1 -> if (isNight) R.drawable.cloudy_with_moon else R.drawable.cloudy_with_sun
+            2 -> if (isNight) R.drawable.cloudy_with_moon else R.drawable.cloudy_with_sun
+            3 -> if (isNight) R.drawable.cloudy_night else R.drawable.cloudy
+            45, 48 -> if (isNight) R.drawable.cloudy_night else R.drawable.cloudy
+            51, 53, 55, 56, 57, 61, 63, 65, 66, 67, 80, 81, 82 -> if (isNight) R.drawable.night_rain else R.drawable.rainingg
+            71, 73, 75, 77, 85, 86 -> if (isNight) R.drawable.snow_night else R.drawable.snow
+            95, 96, 99 -> if (isNight) R.drawable.night_thunderraining else R.drawable.thunderstorm
+            else -> if (isNight) R.drawable.cloudy_with_moon else R.drawable.cloudy_with_sun
         }
     }
 
@@ -83,13 +64,13 @@ object WeatherUtils {
 
     fun getWeatherEmoji(code: Int): String {
         return when (code) {
-            0 -> "☀️" // Trời quang
-            1, 2, 3 -> "⛅" // Nắng nhẹ, mây rải rác, nhiều mây
-            45, 48 -> "🌫️" // Sương mù
-            51, 53, 55, 56, 57, 61, 63, 65, 66, 67, 80, 81, 82 -> "🌧️" // Mưa
-            71, 73, 75, 77, 85, 86 -> "❄️" // Tuyết
-            95, 96, 99 -> "⚡️" // Dông
-            else -> "🌤️" // Mặc định
+            0 -> "☀️"
+            1, 2, 3 -> "⛅"
+            45, 48 -> "🌫️"
+            51, 53, 55, 56, 57, 61, 63, 65, 66, 67, 80, 81, 82 -> "🌧️"
+            71, 73, 75, 77, 85, 86 -> "❄️"
+            95, 96, 99 -> "⚡️"
+            else -> "🌤️"
         }
     }
 

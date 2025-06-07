@@ -254,7 +254,8 @@ class MainActivity : ComponentActivity() {
                                     return
                                 }
                                 CoroutineScope(Dispatchers.IO).launch {
-                                    val cityName = preferences.getString("current_city", "Hà Nội") ?: "Hà Nội"
+                                    val cityName = preferences.getString("current_location_city", null)
+                                        ?: preferences.getString("current_city", "Hà Nội") ?: "Hà Nội"
                                     val weatherData = weatherDao.getLatestWeatherDataWithDailyDetailsForCity(cityName)
                                     if (weatherData == null || weatherData.dailyDetails.isEmpty()) {
                                         Log.w("MainActivity", "No weather data available for $cityName")
@@ -278,7 +279,8 @@ class MainActivity : ComponentActivity() {
                             return
                         }
                         CoroutineScope(Dispatchers.IO).launch {
-                            val cityName = preferences.getString("current_city", "Hà Nội") ?: "Hà Nội"
+                            val cityName = preferences.getString("current_location_city", null)
+                                ?: preferences.getString("current_city", "Hà Nội") ?: "Hà Nội"
                             val weatherData = weatherDao.getLatestWeatherDataWithDailyDetailsForCity(cityName)
                             if (weatherData == null || weatherData.dailyDetails.isEmpty()) {
                                 Log.w("MainActivity", "No weather data available for $cityName")
@@ -597,19 +599,12 @@ class MainActivity : ComponentActivity() {
         }
 
         if (!isInternetAvailable()) {
-            Log.w("WeatherApp", "Không có kết nối internet, không thể lấy tên thành phố")
-            Toast.makeText(this, "Không có kết nối internet, không thể lấy tên thành phố", Toast.LENGTH_LONG).show()
-            val city = City(
-                name = "Vị trí hiện tại",
-                latitude = location.latitude,
-                longitude = location.longitude
-            )
-            
-            // Luôn thêm thành phố mới vào đầu danh sách và cập nhật
-            viewModel.addCity(city, true)
-            
-            // Vẫn cập nhật thành phố hiện tại ngay cả khi không có internet
-            viewModel.updateCurrentCity("Vị trí hiện tại")
+            Log.e("WeatherApp", "No internet connection available.")
+            CoroutineScope(Dispatchers.Main).launch {
+                withContext(Dispatchers.Main) {
+                    Toast.makeText(this@MainActivity, "No internet connection available.", Toast.LENGTH_LONG).show();
+                }
+            }
             return
         }
 
@@ -706,6 +701,10 @@ class MainActivity : ComponentActivity() {
                     
                     Log.d("WeatherApp", "Tên địa điểm đã chọn: $locationName")
                     Log.i("LocationTest", "Tên địa điểm cuối cùng đã chọn: $locationName")
+
+                    // Lưu tên thành phố vị trí hiện tại vào SharedPreferences
+                    val prefs = getSharedPreferences("weather_prefs", Context.MODE_PRIVATE)
+                    prefs.edit().putString("current_location_city", locationName).apply()
 
                     withContext(Dispatchers.Main) {
                         val city = City(

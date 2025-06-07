@@ -85,7 +85,7 @@ fun FilteredCitiesScreen(
                 if (data != null && data.timeList.isNotEmpty()) {
                     val index = viewModel.getCurrentIndex(city.name)
                     val weatherCode = data.weatherCodeList.getOrNull(index) ?: 0
-                    val description = getFilteredWeatherDescription(weatherCode)
+                    val description = WeatherUtils.getWeatherDescription(weatherCode, city.name)
                     val timeString = data.timeList.getOrNull(index) ?: ""
                     
                     // Kiểm tra trạng thái thời tiết theo mã trước
@@ -468,7 +468,7 @@ fun FilteredCitiesScreen(
                                 val currentWeatherCode = weatherData.weatherCodeList.getOrNull(index) ?: 0
                                 val currentHumidity = weatherData.humidityList.getOrNull(index)?.toInt() ?: 0
                                 val currentWindSpeed = weatherData.windSpeedList.getOrNull(index)?.toInt() ?: 0
-                                val weatherDescription = getFilteredWeatherDescription(currentWeatherCode)
+                                val weatherDescription = WeatherUtils.getWeatherDescription(currentWeatherCode, city.name)
                                 
                                 Row(
                                     modifier = Modifier
@@ -542,7 +542,7 @@ fun FilteredCitiesScreen(
                                     }
                                     Column(horizontalAlignment = Alignment.End) {
                                         // Hiển thị icon thời tiết
-                                        val weatherIcon = getFilteredWeatherIcon(currentWeatherCode)
+                                        val weatherIcon = WeatherUtils.getWeatherIcon(currentWeatherCode, isNightTime)
                                         
                                         Image(
                                             painter = painterResource(id = weatherIcon),

@@ -16,7 +16,7 @@ class DailyForecastWorker(appContext: Context, params: WorkerParameters) : Corou
         Log.d("DailyForecastWorker", "Starting doWork for tags: $tags")
         return try {
             val preferences = applicationContext.getSharedPreferences("weather_prefs", Context.MODE_PRIVATE)
-            val cityName = preferences.getString("current_city", "Hà Nội") ?: "Hà Nội"
+            val cityName = preferences.getString("current_location_city", "Hà Nội") ?: "Hà Nội"
             val weatherDao = WeatherDatabase.getDatabase(applicationContext).weatherDao()
             val weatherDataWithDailyDetails = weatherDao.getLatestWeatherDataWithDailyDetailsForCity(cityName)
 

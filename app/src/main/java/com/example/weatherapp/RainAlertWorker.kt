@@ -35,7 +35,9 @@ class RainAlertWorker(appContext: Context, params: WorkerParameters) : Coroutine
                 return Result.success()
             }
 
-            val cityName = preferences.getString("current_city", "Hà Nội") ?: "Hà Nội"
+            // Ưu tiên lấy cityName từ current_location_city, fallback sang current_city
+            val cityName = preferences.getString("current_location_city", null)
+                ?: preferences.getString("current_city", "Hà Nội") ?: "Hà Nội"
             val weatherDao = WeatherDatabase.getDatabase(applicationContext).weatherDao()
             val weatherData = weatherDao.getLatestWeatherDataWithDetailsForCity(cityName)
 
@@ -45,13 +47,13 @@ class RainAlertWorker(appContext: Context, params: WorkerParameters) : Coroutine
             }
 
             val now = LocalDateTime.now()
-            val next15Minutes = now.plusMinutes(15)
+            val next60Minutes = now.plusMinutes(60)
             val formatter = DateTimeFormatter.ISO_LOCAL_DATE_TIME
             val timeFormatter = DateTimeFormatter.ofPattern("HH:mm")
 
             val upcomingRainDetails = weatherData.details.filter { detail ->
                 val detailTime = LocalDateTime.parse(detail.time, formatter)
-                detailTime.isAfter(now) && detailTime.isBefore(next15Minutes) && detail.precipitation_probability >= 20
+                detailTime.isAfter(now) && detailTime.isBefore(next60Minutes) && detail.precipitation_probability >= 20
             }
 
             upcomingRainDetails.forEach { detail ->

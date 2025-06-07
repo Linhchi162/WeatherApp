@@ -18,7 +18,8 @@ class SevereWeatherAlertWorker(
         try {
             val weatherDao = WeatherDatabase.getDatabase(applicationContext).weatherDao()
             val preferences = applicationContext.getSharedPreferences("weather_prefs", Context.MODE_PRIVATE)
-            val cityName = preferences.getString("current_city", "Hà Nội") ?: "Hà Nội"
+            val cityName = preferences.getString("current_location_city", null)
+                ?: preferences.getString("current_city", "Hà Nội") ?: "Hà Nội"
 
             val weatherData = weatherDao.getLatestWeatherDataWithDetailsForCity(cityName)
             if (weatherData == null || weatherData.details.isEmpty()) {

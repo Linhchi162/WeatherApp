@@ -530,17 +530,21 @@ fun ForecastItem(iconId: Int, temp: String, time: String, highlight: Boolean = f
 // ========== Content Section Composables ==========
 // Current Weather Section
 @Composable
-fun CurrentWeatherSection(city: City, weatherData: WeatherDataState, viewModel: WeatherViewModel, temperatureUnit: UnitConverter.TemperatureUnit, isNightTime: Boolean) {
-    val index = remember(city.name, weatherData.timeList) { viewModel.getCurrentIndex(city.name) }
+fun CurrentWeatherSection(city: City, weatherData: WeatherDataState?, viewModel: WeatherViewModel, temperatureUnit: UnitConverter.TemperatureUnit, isNightTime: Boolean) {
+    if (weatherData == null) {
+        Text("Không có dữ liệu thời tiết", color = Color.Red)
+        return
+    }
+    val index = remember(city.name, weatherData?.timeList) { weatherData?.let { viewModel.getCurrentIndex(city.name) } ?: 0 }
     
     // Màu chữ theo thời gian
     val primaryTextColor = if (isNightTime) Color.White else Color(0xFF5372dc)
     val secondaryTextColor = if (isNightTime) Color.White.copy(alpha = 0.8f) else Color(0xFF5372dc).copy(alpha = 0.8f)
     
     // Chuyển đổi nhiệt độ theo đơn vị được chọn
-    val currentTempRaw = weatherData.temperatureList.getOrNull(index) ?: 0.0
-    val highRaw = weatherData.dailyTempMaxList.firstOrNull() ?: weatherData.temperatureList.maxOrNull() ?: 0.0
-    val lowRaw = weatherData.dailyTempMinList.firstOrNull() ?: weatherData.temperatureList.minOrNull() ?: 0.0
+    val currentTempRaw = weatherData?.temperatureList?.getOrNull(index) ?: 0.0
+    val highRaw = weatherData?.dailyTempMaxList?.firstOrNull() ?: weatherData?.temperatureList?.maxOrNull() ?: 0.0
+    val lowRaw = weatherData?.dailyTempMinList?.firstOrNull() ?: weatherData?.temperatureList?.minOrNull() ?: 0.0
     
     val currentTemp = UnitConverter.convertTemperature(currentTempRaw, temperatureUnit).toInt()
     val high = UnitConverter.convertTemperature(highRaw, temperatureUnit).toInt()
@@ -548,18 +552,18 @@ fun CurrentWeatherSection(city: City, weatherData: WeatherDataState, viewModel: 
     
     val tempSymbol = if (temperatureUnit == UnitConverter.TemperatureUnit.CELSIUS) "°C" else "°F"
     
-    val weatherCode = weatherData.weatherCodeList.getOrNull(index) ?: 0
+    val weatherCode = weatherData?.weatherCodeList?.getOrNull(index) ?: 0
     val weatherIcon = getWeatherIcon(weatherCode) // Hàm lấy icon từ code
-    val weatherText = getWeatherDescription(weatherCode) // Hàm lấy mô tả thời tiết
+    val weatherText = WeatherUtils.getWeatherDescription(weatherCode) // Hàm lấy mô tả thời tiết
 
     // Đảm bảo hiển thị tỷ lệ mưa đúng cho các mã thời tiết dông/mưa
     val adjustedRainPercentage = remember(weatherCode) {
         when {
             // Nếu là mã thời tiết dông/mưa rào/mưa to mà xác suất mưa < 30% thì điều chỉnh
             (weatherCode in 95..99 || weatherCode in 80..82 || weatherCode in 61..67) && 
-              (weatherData.dailyPrecipitationList.getOrNull(index)?.toInt() ?: 0) < 30 -> 
-                max(weatherData.dailyPrecipitationList.getOrNull(index)?.toInt() ?: 0, 60)  // Tối thiểu 60% cho dông
-            else -> weatherData.dailyPrecipitationList.getOrNull(index)?.toInt() ?: 0
+              (weatherData?.dailyPrecipitationList?.getOrNull(index)?.toInt() ?: 0) < 30 -> 
+                max(weatherData?.dailyPrecipitationList?.getOrNull(index)?.toInt() ?: 0, 60)  // Tối thiểu 60% cho dông
+            else -> weatherData?.dailyPrecipitationList?.getOrNull(index)?.toInt() ?: 0
         }
     }
     
@@ -589,7 +593,11 @@ fun CurrentWeatherSection(city: City, weatherData: WeatherDataState, viewModel: 
 
 // Additional Info Section
 @Composable
-fun AdditionalInfoSection(weatherData: WeatherDataState, viewModel: WeatherViewModel, windSpeedUnit: UnitConverter.WindSpeedUnit, isNightTime: Boolean) {
+fun AdditionalInfoSection(weatherData: WeatherDataState?, viewModel: WeatherViewModel, windSpeedUnit: UnitConverter.WindSpeedUnit, isNightTime: Boolean) {
+    if (weatherData == null) {
+        Text("Không có dữ liệu thời tiết", color = Color.Red)
+        return
+    }
     val index = remember(weatherData.timeList) { viewModel.getCurrentIndex(viewModel.currentCity) }
     
     // Màu nền card theo thời gian
@@ -623,7 +631,11 @@ fun AdditionalInfoSection(weatherData: WeatherDataState, viewModel: WeatherViewM
 
 // Hourly Forecast Section
 @Composable
-fun HourlyForecastSection(city: City, weatherData: WeatherDataState, viewModel: WeatherViewModel, currentDateStr: String, temperatureUnit: UnitConverter.TemperatureUnit, isNightTime: Boolean) {
+fun HourlyForecastSection(city: City, weatherData: WeatherDataState?, viewModel: WeatherViewModel, currentDateStr: String, temperatureUnit: UnitConverter.TemperatureUnit, isNightTime: Boolean) {
+    if (weatherData == null) {
+        Text("Không có dữ liệu thời tiết", color = Color.Red)
+        return
+    }
     val cardBackgroundColor = if (isNightTime) Color.Black.copy(alpha = 0.3f) else Color.White.copy(alpha = 0.4f)
     val primaryTextColor = if (isNightTime) Color.White else Color(0xFF5372dc)
     
@@ -682,12 +694,16 @@ fun HourlyForecastSection(city: City, weatherData: WeatherDataState, viewModel: 
 @Composable
 fun DailyForecastSection(
     city: City, 
-    weatherData: WeatherDataState, 
+    weatherData: WeatherDataState?, 
     viewModel: WeatherViewModel, 
     temperatureUnit: UnitConverter.TemperatureUnit,
     isNightTime: Boolean,
     onDayClick: (Int) -> Unit = {}
 ) {
+    if (weatherData == null) {
+        Text("Không có dữ liệu thời tiết", color = Color.Red)
+        return
+    }
     val cardBackgroundColor = if (isNightTime) Color.Black.copy(alpha = 0.3f) else Color.White.copy(alpha = 0.4f)
     val primaryTextColor = if (isNightTime) Color.White else Color(0xFF5372dc)
     val secondaryTextColor = if (isNightTime) Color.White.copy(alpha = 0.8f) else Color(0xFF5372dc).copy(alpha = 0.8f)
@@ -818,7 +834,11 @@ fun AirQualitySection(aqi: Int?, isNightTime: Boolean) {
 
 // Other Details Section
 @Composable
-fun OtherDetailsSection(weatherData: WeatherDataState, viewModel: WeatherViewModel, temperatureUnit: UnitConverter.TemperatureUnit, windSpeedUnit: UnitConverter.WindSpeedUnit, pressureUnit: UnitConverter.PressureUnit, visibilityUnit: UnitConverter.VisibilityUnit, isNightTime: Boolean) {
+fun OtherDetailsSection(weatherData: WeatherDataState?, viewModel: WeatherViewModel, temperatureUnit: UnitConverter.TemperatureUnit, windSpeedUnit: UnitConverter.WindSpeedUnit, pressureUnit: UnitConverter.PressureUnit, visibilityUnit: UnitConverter.VisibilityUnit, isNightTime: Boolean) {
+    if (weatherData == null) {
+        Text("Không có dữ liệu thời tiết", color = Color.Red)
+        return
+    }
     val index = remember(weatherData.timeList) { viewModel.getCurrentIndex(viewModel.currentCity) }
     val cardBackgroundColor = if (isNightTime) Color.Black.copy(alpha = 0.3f) else Color.White.copy(alpha = 0.4f)
     val primaryTextColor = if (isNightTime) Color.White else Color(0xFF5372DC)
@@ -1184,7 +1204,11 @@ fun SunInfoSection(city: City, viewModel: WeatherViewModel) {
 
 // Last Update Section
 @Composable
-fun LastUpdateSection(weatherData: WeatherDataState, isNightTime: Boolean) {
+fun LastUpdateSection(weatherData: WeatherDataState?, isNightTime: Boolean) {
+    if (weatherData == null) {
+        Text("Không có dữ liệu thời tiết", color = Color.Red)
+        return
+    }
     val textColor = if (isNightTime) Color.White.copy(alpha = 0.7f) else Color(0xFF5372dc).copy(alpha = 0.7f)
     
     weatherData.lastUpdateTime?.let {
@@ -2181,6 +2205,7 @@ fun WeatherMainScreen(
 
     LaunchedEffect(pagerState.currentPage, cities.size) {
         if (cities.isNotEmpty() && pagerState.currentPage < cities.size) {
+            // Chỉ update currentCity, KHÔNG update current_location_city
             viewModel.updateCurrentCity(cities[pagerState.currentPage].name)
         }
     }
@@ -2275,9 +2300,21 @@ fun WeatherMainScreen(
                             val weatherData = viewModel.weatherDataMap[city.name]
                             val isNetworkAvailable = isNetworkAvailable(context)
 
+                            val noData = weatherData == null || (
+                                weatherData.timeList.isEmpty() &&
+                                weatherData.dailyTimeList.isEmpty() &&
+                                weatherData.currentAqi == null
+                            )
+
                             when {
+                                !isNetworkAvailable && noData -> {
+                                    // Không có mạng và không có dữ liệu offline: chỉ hiện 1 màn hình
+                                    OfflineScreen(lastUpdateTime = null, isNightTime = isNightTime)
+                                    return@HorizontalPager // Ngăn không cho thực hiện các thao tác khác
+                                }
                                 !isNetworkAvailable -> {
                                     OfflineScreen(lastUpdateTime = weatherData?.lastUpdateTime, isNightTime = isNightTime)
+                                    return@HorizontalPager // Ngăn không cho thực hiện các thao tác khác
                                 }
                                 weatherData == null || (weatherData.timeList.isEmpty() && weatherData.dailyTimeList.isEmpty() && weatherData.currentAqi == null) || weatherData.errorMessage != null -> {
                                     LoadingOrErrorScreen(
@@ -2285,6 +2322,7 @@ fun WeatherMainScreen(
                                         lastUpdateTime = weatherData?.lastUpdateTime,
                                         isNightTime = isNightTime
                                     )
+                                    return@HorizontalPager // Ngăn không cho thực hiện các thao tác khác
                                 }
                                 else -> {
                                     val currentDate = LocalDate.now()
@@ -3295,14 +3333,15 @@ fun DayWeatherDetailScreen(
 // Hàm helper để tạo DayWeatherDetail từ dữ liệu có sẵn
 fun createDayWeatherDetail(
     index: Int,
-    weatherData: WeatherDataState,
+    weatherData: WeatherDataState?,
     viewModel: WeatherViewModel
 ): DayWeatherDetail? {
+    if (weatherData == null) return null
     val dailyForecast = viewModel.getDailyForecast(viewModel.currentCity, 7)
     if (index >= dailyForecast.size) return null
-    
-    val (time, temps, weatherCode) = dailyForecast[index]
-    val date = LocalDate.parse(time, DateTimeFormatter.ISO_LOCAL_DATE)
+    // Fallback an toàn cho mọi truy cập list
+    val (time, temps, weatherCode) = dailyForecast.getOrNull(index) ?: return null
+    val date = try { LocalDate.parse(time, DateTimeFormatter.ISO_LOCAL_DATE) } catch (e: Exception) { return null }
     val formattedDate = when (date) {
         LocalDate.now() -> "Hôm nay"
         LocalDate.now().plusDays(1) -> "Ngày mai" 
@@ -3320,17 +3359,14 @@ fun createDayWeatherDetail(
             "$dayOfWeek, ${date.dayOfMonth}/${date.monthValue}"
         }
     }
-    
-    // Lấy dữ liệu chi tiết từ weatherData
     val precipitation = weatherData.dailyPrecipitationList.getOrNull(index)?.toInt() ?: 0
-    
-    // Sử dụng dữ liệu trung bình trong ngày cho các thông số khác (nếu có)
-    val humidity = weatherData.humidityList.getOrNull(index * 8)?.toInt() // Ước tính theo giờ
-    val windSpeed = weatherData.windSpeedList.getOrNull(index * 8) // Ước tính theo giờ
-    val pressure = weatherData.pressureList.getOrNull(index * 8) // Ước tính theo giờ
-    val uvIndex = weatherData.uvList.getOrNull(index * 8) // Ước tính theo giờ
-    val visibility = weatherData.visibilityList.getOrNull(index * 8) // Ước tính theo giờ
-    
+    val humidity = weatherData.humidityList.getOrNull(index * 8)?.toInt()
+    val windSpeed = weatherData.windSpeedList.getOrNull(index * 8)
+    val pressure = weatherData.pressureList.getOrNull(index * 8)
+    val uvIndex = weatherData.uvList.getOrNull(index * 8)
+    val visibility = weatherData.visibilityList.getOrNull(index * 8)
+    val sunrise = weatherData.dailySunriseList.getOrNull(index)?.let { formatTime(it) } ?: "6:00"
+    val sunset = weatherData.dailySunsetList.getOrNull(index)?.let { formatTime(it) } ?: "18:00"
     return DayWeatherDetail(
         date = time,
         formattedDate = formattedDate,
@@ -3343,13 +3379,9 @@ fun createDayWeatherDetail(
         pressure = pressure,
         uvIndex = uvIndex,
         visibility = visibility,
-        weatherDescription = getWeatherDescription(weatherCode),
-        sunrise = weatherData.dailyTimeList.getOrNull(index)?.let { date ->
-            weatherData.dailySunriseList.getOrNull(index)?.let { formatTime(it) } ?: "6:00"
-        } ?: "6:00",
-        sunset = weatherData.dailyTimeList.getOrNull(index)?.let { date ->
-            weatherData.dailySunsetList.getOrNull(index)?.let { formatTime(it) } ?: "18:00"
-        } ?: "18:00"
+        weatherDescription = WeatherUtils.getWeatherDescription(weatherCode),
+        sunrise = sunrise,
+        sunset = sunset
     )
 }
 

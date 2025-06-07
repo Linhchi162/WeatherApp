@@ -73,20 +73,20 @@ private fun WeatherWidgetContent(context: Context) {
                 intent.flags = Intent.FLAG_ACTIVITY_NEW_TASK
                 context.startActivity(intent)
             }
-            .padding(12.dp),
+            .padding(6.dp),
         contentAlignment = GlanceAlignment.Center
     ) {
         if (weatherData.value == null) {
             Box(
                 modifier = GlanceModifier
                     .fillMaxSize()
-                    .padding(16.dp),
+                    .padding(8.dp),
                 contentAlignment = GlanceAlignment.Center
             ) {
                 Text(
                     text = "Đang tải...",
                     style = TextStyle(
-                        fontSize = 14.sp,
+                        fontSize = 16.sp,
                         fontWeight = GlanceFontWeight.Medium,
                         color = androidx.glance.color.ColorProvider(
                             day = androidx.compose.ui.graphics.Color.White,
@@ -96,47 +96,45 @@ private fun WeatherWidgetContent(context: Context) {
                 )
             }
         } else {
-                Column(
+            Column(
                 horizontalAlignment = GlanceAlignment.CenterHorizontally,
-                    modifier = GlanceModifier.fillMaxSize()
-                ) {
+                modifier = GlanceModifier.fillMaxSize()
+            ) {
                 // City name
-                    Text(
-                        text = weatherData.value!!.cityName,
-                        style = TextStyle(
-                            fontSize = 16.sp,
+                Text(
+                    text = weatherData.value!!.cityName,
+                    style = TextStyle(
+                        fontSize = 18.sp,
                         fontWeight = GlanceFontWeight.Bold,
-                            color = androidx.glance.color.ColorProvider(
+                        color = androidx.glance.color.ColorProvider(
                             day = androidx.compose.ui.graphics.Color.White,
                             night = androidx.compose.ui.graphics.Color.White
-                            )
-                        ),
-                    modifier = GlanceModifier.padding(bottom = 8.dp)
-                    )
-
+                        )
+                    ),
+                    modifier = GlanceModifier.padding(bottom = 4.dp)
+                )
                 // Temperature and weather icon
-                    Row(
+                Row(
                     verticalAlignment = GlanceAlignment.CenterVertically,
-                        modifier = GlanceModifier.padding(bottom = 8.dp)
-                    ) {
-                        Text(
-                            text = "${UnitConverter.convertTemperature(weatherData.value!!.currentTemperature, temperatureUnit).toInt()}°",
-                            style = TextStyle(
-                            fontSize = 32.sp,
+                    modifier = GlanceModifier.padding(bottom = 4.dp)
+                ) {
+                    Text(
+                        text = "${UnitConverter.convertTemperature(weatherData.value!!.currentTemperature, temperatureUnit).toInt()}°",
+                        style = TextStyle(
+                            fontSize = 40.sp,
                             fontWeight = GlanceFontWeight.Bold,
-                                color = androidx.glance.color.ColorProvider(
+                            color = androidx.glance.color.ColorProvider(
                                 day = androidx.compose.ui.graphics.Color.White,
                                 night = androidx.compose.ui.graphics.Color.White
                             )
-                            )
                         )
-                        Image(
-                        provider = ImageProvider(getWeatherIconResource(weatherData.value!!.weatherCode)),
-                            contentDescription = "Weather Icon",
-                        modifier = GlanceModifier.size(40.dp).padding(start = 8.dp)
-                        )
-                    }
-
+                    )
+                    Image(
+                        provider = ImageProvider(WeatherUtils.getWeatherIcon(weatherData.value!!.weatherCode, false)),
+                        contentDescription = "Weather Icon",
+                        modifier = GlanceModifier.size(48.dp).padding(start = 8.dp)
+                    )
+                }
                 // High/Low temperatures
                 Row(
                     horizontalAlignment = GlanceAlignment.CenterHorizontally
@@ -144,7 +142,7 @@ private fun WeatherWidgetContent(context: Context) {
                     Text(
                         text = "H:${UnitConverter.convertTemperature(weatherData.value!!.temperatureMax, temperatureUnit).toInt()}°",
                         style = TextStyle(
-                            fontSize = 14.sp,
+                            fontSize = 16.sp,
                             fontWeight = GlanceFontWeight.Medium,
                             color = androidx.glance.color.ColorProvider(
                                 day = androidx.compose.ui.graphics.Color.White,
@@ -152,32 +150,31 @@ private fun WeatherWidgetContent(context: Context) {
                             )
                         )
                     )
-                                Text(
+                    Text(
                         text = " L:${UnitConverter.convertTemperature(weatherData.value!!.temperatureMin, temperatureUnit).toInt()}°",
-                                    style = TextStyle(
-                            fontSize = 14.sp,
+                        style = TextStyle(
+                            fontSize = 16.sp,
                             fontWeight = GlanceFontWeight.Medium,
-                                        color = androidx.glance.color.ColorProvider(
+                            color = androidx.glance.color.ColorProvider(
                                 day = androidx.compose.ui.graphics.Color.White,
                                 night = androidx.compose.ui.graphics.Color.White
-                                        )
-                                    )
-                                )
+                            )
+                        )
+                    )
                 }
-
                 // Last updated
                 weatherData.value!!.lastUpdated?.let { timestamp ->
-                                Text(
+                    Text(
                         text = formatWidgetTimestamp(timestamp),
-                                    style = TextStyle(
-                            fontSize = 10.sp,
-                                        color = androidx.glance.color.ColorProvider(
+                        style = TextStyle(
+                            fontSize = 12.sp,
+                            color = androidx.glance.color.ColorProvider(
                                 day = androidx.compose.ui.graphics.Color.White.copy(alpha = 0.8f),
                                 night = androidx.compose.ui.graphics.Color.White.copy(alpha = 0.8f)
-                                        )
-                                    ),
-                        modifier = GlanceModifier.padding(top = 4.dp)
-                                )
+                            )
+                        ),
+                        modifier = GlanceModifier.padding(top = 2.dp)
+                    )
                 }
             }
         }
@@ -258,10 +255,10 @@ private fun HourlyWeatherWidgetContent(context: Context) {
                 }
 
                 // Hourly forecast
-                    Row(
+                Row(
                     horizontalAlignment = GlanceAlignment.CenterHorizontally,
                     modifier = GlanceModifier.padding(top = 8.dp)
-                    ) {
+                ) {
                     weatherData.value!!.hourlyForecasts.take(5).forEach { forecast ->
                         Column(
                             modifier = GlanceModifier.padding(horizontal = 4.dp),
@@ -278,7 +275,7 @@ private fun HourlyWeatherWidgetContent(context: Context) {
                                 )
                             )
                             Image(
-                                provider = ImageProvider(getWeatherIconResource(forecast.weatherCode)),
+                                provider = ImageProvider(WeatherUtils.getWeatherIcon(forecast.weatherCode, false)),
                                 contentDescription = "Weather Icon",
                                 modifier = GlanceModifier.size(20.dp).padding(vertical = 2.dp)
                             )
@@ -305,7 +302,7 @@ private suspend fun getWeatherData(context: Context): WidgetWeatherData? {
     return withContext(Dispatchers.IO) {
         try {
             val preferences = context.getSharedPreferences("weather_prefs", Context.MODE_PRIVATE)
-            val currentCity = preferences.getString("current_city", "Hà Nội") ?: "Hà Nội"
+            val currentCity = preferences.getString("current_location_city", "Hà Nội") ?: "Hà Nội"
             val weatherDao = WeatherDatabase.getDatabase(context).weatherDao()
 
             Log.d("WeatherWidget", "Fetching weather data for city: $currentCity")
@@ -366,7 +363,7 @@ private suspend fun getHourlyWeatherData(context: Context): HourlyWidgetWeatherD
     return withContext(Dispatchers.IO) {
         try {
             val preferences = context.getSharedPreferences("weather_prefs", Context.MODE_PRIVATE)
-            val currentCity = preferences.getString("current_city", "Hà Nội") ?: "Hà Nội"
+            val currentCity = preferences.getString("current_location_city", "Hà Nội") ?: "Hà Nội"
             val weatherDao = WeatherDatabase.getDatabase(context).weatherDao()
             val weatherData = weatherDao.getLatestWeatherDataWithDetailsForCity(currentCity)
             
@@ -454,30 +451,6 @@ private fun getBackgroundResource(): Int {
     }
 }
 
-private fun getWeatherIconResource(weatherCode: Int): Int {
-    val currentHour = LocalDateTime.now().hour
-    val isNightTime = currentHour < 6 || currentHour >= 18
-    
-    return when (weatherCode) {
-        0 -> if (isNightTime) R.drawable.cloudy else R.drawable.sunny
-        1 -> if (isNightTime) R.drawable.cloudy else R.drawable.cloudy_with_sun
-        2 -> if (isNightTime) R.drawable.cloudy else R.drawable.cloudy_with_sun
-        3 -> R.drawable.cloudy
-        45, 48 -> R.drawable.cloudy
-        51, 53, 55 -> R.drawable.rainingg
-        56, 57 -> R.drawable.rainingg
-        61, 63, 65 -> R.drawable.rainingg
-        66, 67 -> R.drawable.rainingg
-        71, 73, 75 -> R.drawable.snow
-        77 -> R.drawable.snow
-        80, 81, 82 -> R.drawable.rainingg
-        85, 86 -> R.drawable.snow
-        95 -> R.drawable.thunderstorm
-        96, 99 -> R.drawable.thunderstorm
-        else -> if (isNightTime) R.drawable.cloudy else R.drawable.cloudy_with_sun
-    }
-}
-
 data class WidgetWeatherData(
     val cityName: String,
     val currentTemperature: Double,
@@ -506,18 +479,18 @@ data class HourlyForecast(
 fun WeatherWidgetPreview() {
     Card(
         modifier = Modifier
-            .width(200.dp)
-            .height(120.dp)
-            .padding(8.dp),
+            .width(220.dp)
+            .height(140.dp)
+            .padding(4.dp),
         colors = CardDefaults.cardColors(
-            containerColor = Color(0xFF5372dc).copy(alpha = 0.9f)
+            containerColor = Color(0xFF6650a4)
         ),
         shape = RoundedCornerShape(16.dp)
     ) {
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(12.dp),
+                .padding(10.dp),
             verticalArrangement = Arrangement.SpaceBetween
         ) {
             // Header with city name and last updated
@@ -528,7 +501,7 @@ fun WeatherWidgetPreview() {
             ) {
                 Text(
                     text = "Hà Nội",
-                    style = MaterialTheme.typography.titleSmall,
+                    style = MaterialTheme.typography.titleMedium,
                     color = Color.White,
                     fontWeight = FontWeight.Bold
                 )
@@ -538,7 +511,6 @@ fun WeatherWidgetPreview() {
                     color = Color.White.copy(alpha = 0.8f)
                 )
             }
-            
             // Current weather
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -554,15 +526,14 @@ fun WeatherWidgetPreview() {
                     )
                     Text(
                         text = "H:28° L:22°",
-                        style = MaterialTheme.typography.bodySmall,
+                        style = MaterialTheme.typography.bodyMedium,
                         color = Color.White.copy(alpha = 0.8f)
                     )
                 }
-                
                 Image(
                     painter = painterResource(id = R.drawable.sunny),
                     contentDescription = "Weather icon",
-                    modifier = Modifier.size(40.dp)
+                    modifier = Modifier.size(48.dp)
                 )
             }
         }
@@ -574,18 +545,19 @@ fun WeatherWidgetPreview() {
 fun HourlyWeatherWidgetPreview() {
     Card(
         modifier = Modifier
-            .width(300.dp)
-            .height(120.dp)
-            .padding(8.dp),
+            .width(340.dp)
+            .height(160.dp)
+            .padding(4.dp),
         colors = CardDefaults.cardColors(
-            containerColor = Color(0xFF5372dc).copy(alpha = 0.9f)
+            containerColor = Color(0xFF625b71)
         ),
         shape = RoundedCornerShape(16.dp)
     ) {
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(12.dp)
+                .padding(12.dp),
+            verticalArrangement = Arrangement.SpaceBetween
         ) {
             // Header
             Row(
@@ -595,23 +567,21 @@ fun HourlyWeatherWidgetPreview() {
             ) {
                 Text(
                     text = "Hà Nội",
-                    style = MaterialTheme.typography.titleSmall,
+                    style = MaterialTheme.typography.titleMedium,
                     color = Color.White,
                     fontWeight = FontWeight.Bold
                 )
                 Text(
                     text = "25°",
-                    style = MaterialTheme.typography.headlineSmall,
+                    style = MaterialTheme.typography.headlineMedium,
                     color = Color.White,
                     fontWeight = FontWeight.Bold
                 )
             }
-            
             Spacer(modifier = Modifier.height(8.dp))
-            
             // Hourly forecast
             LazyRow(
-                horizontalArrangement = Arrangement.spacedBy(12.dp)
+                horizontalArrangement = Arrangement.spacedBy(16.dp)
             ) {
                 items(5) { index ->
                     val times = listOf("Now", "15:00", "16:00", "17:00", "18:00")
@@ -623,25 +593,24 @@ fun HourlyWeatherWidgetPreview() {
                         R.drawable.rainingg,
                         R.drawable.cloudy
                     )
-                    
                     Column(
                         horizontalAlignment = Alignment.CenterHorizontally
                     ) {
                         Text(
                             text = times[index],
-                            style = MaterialTheme.typography.bodySmall,
+                            style = MaterialTheme.typography.bodyMedium,
                             color = Color.White.copy(alpha = 0.8f)
                         )
-                        Spacer(modifier = Modifier.height(4.dp))
+                        Spacer(modifier = Modifier.height(6.dp))
                         Image(
                             painter = painterResource(id = icons[index]),
                             contentDescription = null,
-                            modifier = Modifier.size(20.dp)
+                            modifier = Modifier.size(32.dp)
                         )
-                        Spacer(modifier = Modifier.height(4.dp))
+                        Spacer(modifier = Modifier.height(6.dp))
                         Text(
                             text = temps[index],
-                            style = MaterialTheme.typography.bodySmall,
+                            style = MaterialTheme.typography.bodyMedium,
                             color = Color.White,
                             fontWeight = FontWeight.Medium
                         )
