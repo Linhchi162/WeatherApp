@@ -12,7 +12,7 @@ import android.util.Log
 object WeatherUtils {
 
     fun getWeatherDescription(code: Int, cityName: String? = null): String {
-        // Đã bỏ manual fix cho Hà Nội/Bắc Từ Liêm/Vị trí hiện tại
+
         return when (code) {
             0 -> "Trời quang"
             1 -> "Nắng nhẹ"

@@ -5,7 +5,7 @@ import androidx.room.PrimaryKey
 
 @Entity(tableName = "weather_data")
 data class WeatherData(
-    @PrimaryKey(autoGenerate = true) val id: Long = 0, // Thêm autoGenerate và giá trị mặc định
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
     val cityName: String,
     val latitude: Double,
     val longitude: Double,

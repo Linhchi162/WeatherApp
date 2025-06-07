@@ -7,8 +7,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
-import kotlinx.coroutines.async // Import async
-import kotlinx.coroutines.awaitAll // Import awaitAll nếu gọi nhiều async
+import kotlinx.coroutines.async
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -16,17 +15,10 @@ import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
 import android.util.Log
 import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.isActive
 import android.content.Context
-import android.content.SharedPreferences
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
-
-import kotlin.math.pow
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.StateFlow
 import com.google.android.gms.maps.model.LatLng
-import com.google.android.gms.maps.model.LatLngBounds
 import android.widget.Toast
 
 
@@ -59,12 +51,12 @@ data class WeatherDataState(
     var dailySunsetList: List<String> = emptyList(),
     var lastUpdateTime: Long? = null,
     var errorMessage: String? = null,
-    // --- Thêm trường AQI ---
-    var currentAqi: Int? = null, // Chỉ số AQI hiện tại (nullable)
-    var currentPm25: Double? = null, // Chỉ số PM2.5 hiện tại (nullable)
-    // --- Thêm trường Radar Cache ---
-    var radarCache: Map<String, RadarLayerCache> = emptyMap(), // Cache cho các layer radar
-    var radarLastUpdate: Long? = null // Thời gian update cache cuối cùng
+
+    var currentAqi: Int? = null,
+    var currentPm25: Double? = null,
+
+    var radarCache: Map<String, RadarLayerCache> = emptyMap(),
+    var radarLastUpdate: Long? = null
 )
 
 data class RadarLayerCache(
@@ -78,7 +70,7 @@ data class RadarTile(
     val x: Int,
     val y: Int,
     val zoom: Int,
-    val bitmapData: ByteArray? = null, // Store bitmap as byte array for caching
+    val bitmapData: ByteArray? = null,
     val isLoaded: Boolean = false,
     val bounds: com.google.android.gms.maps.model.LatLngBounds? = null
 ) {
@@ -97,17 +89,9 @@ data class RadarTile(
     }
 }
 
-data class LatLngBounds(
-    val southwest: LatLng,
-    val northeast: LatLng
-)
 
-data class LatLng(
-    val latitude: Double,
-    val longitude: Double
-)
 
-data class PlaceSuggestion( // Lớp đơn giản để hiển thị trong UI
+data class PlaceSuggestion(
     val formattedName: String,
     val city: String?,
     val country: String?,
@@ -117,11 +101,11 @@ data class PlaceSuggestion( // Lớp đơn giản để hiển thị trong UI
 
 class WeatherViewModel(
     private val weatherDao: WeatherDao,
-    private val openMeteoService: OpenMeteoService, // Service for weather forecast
-    private val airQualityService: AirQualityService, // Service for air quality
+    private val openMeteoService: OpenMeteoService,
+    private val airQualityService: AirQualityService,
 
-    private val geoNamesService: GeoNamesService = RetrofitInstance.geoNamesApi, // Service for GeoNames
-    private val appContext: Context? = null // Thêm context để lưu/đọc SharedPreferences
+    private val geoNamesService: GeoNamesService = RetrofitInstance.geoNamesApi,
+    private val appContext: Context? = null
 ) : ViewModel() {
     // Hằng số cho debug log
     companion object {
@@ -1870,7 +1854,6 @@ class WeatherViewModel(
         
         newRadarCache[layer] = layerCache
         
-        // Create updated data by copying all fields manually
         val updatedData = WeatherDataState(
             timeList = currentData.timeList,
             temperatureList = currentData.temperatureList,
@@ -1980,13 +1963,5 @@ class WeatherViewModel(
         Log.d("WeatherViewModel", "Cleared radar cache for $cityName")
     }
     
-    // Get all available radar layers
-    fun getAvailableRadarLayers(): List<Pair<String, String>> {
-        return listOf(
-            "precipitation" to "Mưa",
-            "clouds" to "Mây",
-            "wind" to "Gió", 
-            "temp" to "Nhiệt độ"
-        )
-    }
+
 }

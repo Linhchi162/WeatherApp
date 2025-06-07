@@ -7,25 +7,17 @@ interface GeoNamesService {
     @GET("searchJSON")
     suspend fun getCitiesByCountry(
         @Query("country") countryCode: String = "",
-        @Query("featureClass") featureClass: String = "P", // P là địa điểm có dân số (populated place)
+        @Query("featureClass") featureClass: String = "P",
         @Query("maxRows") maxRows: Int = 100,
-        @Query("orderby") orderBy: String = "population", // Sắp xếp theo dân số
+        @Query("orderby") orderBy: String = "population",
         @Query("username") username: String,
-        @Query("lang") language: String = "vi", // Ngôn ngữ tiếng Việt nếu có
-        @Query("q") q: String = "" // Fulltext search
+        @Query("lang") language: String = "vi",
+        @Query("q") q: String = ""
     ): GeoNamesResponse
-    
-    @GET("countryInfoJSON")
-    suspend fun getCountryInfo(
-        @Query("country") countryCode: String,
-        @Query("username") username: String,
-        @Query("lang") language: String = "vi" // Ngôn ngữ tiếng Việt nếu có
-    ): GeoNamesResponse
-    
-    // Thêm endpoint để lấy tất cả các quốc gia
+
     @GET("countryInfoJSON")
     suspend fun getAllCountries(
         @Query("username") username: String,
-        @Query("lang") language: String = "vi" // Ngôn ngữ tiếng Việt nếu có
+        @Query("lang") language: String = "vi"
     ): CountryInfoResponse
 } 

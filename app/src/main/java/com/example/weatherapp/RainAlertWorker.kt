@@ -35,7 +35,7 @@ class RainAlertWorker(appContext: Context, params: WorkerParameters) : Coroutine
                 return Result.success()
             }
 
-            // Ưu tiên lấy cityName từ current_location_city, fallback sang current_city
+
             val cityName = preferences.getString("current_location_city", null)
                 ?: preferences.getString("current_city", "Hà Nội") ?: "Hà Nội"
             val weatherDao = WeatherDatabase.getDatabase(applicationContext).weatherDao()
@@ -65,7 +65,7 @@ class RainAlertWorker(appContext: Context, params: WorkerParameters) : Coroutine
                 val title = "Cảnh báo mưa tại $cityName $weatherEmoji"
                 val message = "Khả năng mưa: $precipitation% vào lúc $timeString"
 
-                // Kiểm tra thông báo trùng lặp
+
                 val lastNotificationTime = preferences.getString("last_rain_notification_time", null)
                 val lastNotificationMessage = preferences.getString("last_rain_notification_message", null)
 
@@ -76,7 +76,7 @@ class RainAlertWorker(appContext: Context, params: WorkerParameters) : Coroutine
 
                 sendNotification(applicationContext, title, message, weatherIcon)
 
-                // Lưu thông tin thông báo vừa gửi
+
                 preferences.edit()
                     .putString("last_rain_notification_time", detail.time)
                     .putString("last_rain_notification_message", message)

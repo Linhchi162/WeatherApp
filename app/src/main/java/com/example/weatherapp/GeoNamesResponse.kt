@@ -15,10 +15,10 @@ data class GeoNameCity(
     val fcode: String,
     val population: Long?,
     val toponymName: String?,
-    val adminName1: String?  // Tên tỉnh/bang/vùng
+    val adminName1: String?
 )
 
-// Data class cho country info response
+
 data class CountryInfoResponse(
     val geonames: List<CountryInfo>?
 )

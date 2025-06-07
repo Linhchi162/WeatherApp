@@ -3,8 +3,8 @@ package com.example.weatherapp
 class WeatherRespone {
     data class WeatherResponse(
         val hourly: Hourly,
-        val daily: Daily, // Thêm daily
-        val current: Current? // optional
+        val daily: Daily,
+        val current: Current?
     )
 
     data class Hourly(
@@ -31,15 +31,15 @@ class WeatherRespone {
     )
 
     data class Current(
-        val temperature_2m: Double?, // Nên để nullable cho an toàn
+        val temperature_2m: Double?,
         val relative_humidity_2m: Double?,
         val apparent_temperature: Double?,
         val uv_index: Double?,
         val visibility: Double?,
-        val pressure_msl: Double?, // Hoặc surface_pressure nếu đã đổi
+        val pressure_msl: Double?,
         val windspeed_10m: Double?,
         val time: String?,
-        // Thêm các trường AQI (nullable)
+
         val us_aqi: Int?,
         val pm2_5: Double?
     )

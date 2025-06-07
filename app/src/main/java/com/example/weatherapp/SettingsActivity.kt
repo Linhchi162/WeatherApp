@@ -93,11 +93,11 @@ fun SettingsScreen(
     val preferences = context.getSharedPreferences("weather_prefs", Context.MODE_PRIVATE)
     val editor = preferences.edit()
 
-    // Dark mode detection based on time
+
     val currentTime = LocalTime.now()
     val isDarkMode = currentTime.hour < 6 || currentTime.hour >= 18
     
-    // Colors based on theme
+
     val backgroundColor = if (isDarkMode) {
         Color(0xFF1A202C)
     } else {
@@ -419,7 +419,7 @@ fun SettingsScreen(
         Spacer(modifier = Modifier.height(16.dp))
 
 
-        // Phần Dự báo thời tiết hàng ngày
+
 
         Column(
             modifier = Modifier
@@ -497,7 +497,7 @@ fun SettingsScreen(
         )
         Spacer(modifier = Modifier.height(6.dp))
 
-        // Phần Đơn vị
+
 
         Column(
             modifier = Modifier
@@ -726,201 +726,3 @@ fun TimePickerDialog(
         }
     }
 }
-
-@Preview(showBackground = true)
-@Composable
-fun UnitItemPreview() {
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .background(Color.White)
-            .padding(16.dp)
-    ) {
-        UnitItem(
-            label = "Nhiệt độ",
-            selectedValue = "Độ C (°C)",
-            onClick = {},
-            textColor = Color.Black,
-            secondaryTextColor = Color.Gray
-        )
-        Divider(color = Color.LightGray, thickness = 0.5.dp)
-        UnitItem(
-            label = "Tốc độ gió",
-            selectedValue = "Kilomet mỗi giờ (km/h)",
-            onClick = {},
-            textColor = Color.Black,
-            secondaryTextColor = Color.Gray
-        )
-        Divider(color = Color.LightGray, thickness = 0.5.dp)
-        UnitItem(
-            label = "Áp suất không khí",
-            selectedValue = "Hectopascal (hPa)",
-            onClick = {},
-            textColor = Color.Black,
-            secondaryTextColor = Color.Gray
-        )
-    }
-}
-
-@Preview(showBackground = true)
-@Composable
-fun UnitSelectionDialogPreview() {
-    UnitSelectionDialog(
-        title = "Nhiệt độ",
-        options = listOf("Độ C (°C)", "Độ F (°F)"),
-        onUnitSelected = {},
-        onDismiss = {},
-        textColor = Color.Black,
-        backgroundColor = Color.White
-    )
-}
-
-@Preview(showBackground = true)
-@Composable
-fun TimePickerDialogPreview() {
-    TimePickerDialog(
-        onTimeSelected = {},
-        onDismiss = {},
-        textColor = Color.Black,
-        backgroundColor = Color.White
-    )
-}
-
-@Preview(showBackground = true, heightDp = 600)
-@Composable
-fun SettingsScreenPreview() {
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(
-                brush = Brush.linearGradient(
-                    colors = listOf(Color(0xFF87CEEB), Color(0xFF98FB98))
-                )
-            )
-            .padding(16.dp)
-    ) {
-        // Header
-        Text(
-            text = "Cài đặt",
-            fontSize = 24.sp,
-            fontWeight = FontWeight.Bold,
-            color = Color(0xFF5372dc),
-            modifier = Modifier.padding(bottom = 16.dp)
-        )
-        
-        // Units section
-        Card(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(vertical = 8.dp),
-            colors = CardDefaults.cardColors(
-                containerColor = Color.White.copy(alpha = 0.9f)
-            ),
-            shape = RoundedCornerShape(12.dp)
-        ) {
-            Column(
-                modifier = Modifier.padding(16.dp)
-            ) {
-                Text(
-                    text = "Đơn vị đo lường",
-                    fontSize = 18.sp,
-                    fontWeight = FontWeight.Medium,
-                    color = Color(0xFF5372dc),
-                    modifier = Modifier.padding(bottom = 12.dp)
-                )
-                
-                UnitItem(
-                    label = "Nhiệt độ",
-                    selectedValue = "Độ C (°C)",
-                    onClick = {},
-                    textColor = Color.Black,
-                    secondaryTextColor = Color.Gray
-                )
-                Divider(color = Color.LightGray.copy(alpha = 0.5f), thickness = 0.5.dp)
-                UnitItem(
-                    label = "Tốc độ gió",
-                    selectedValue = "Kilomet mỗi giờ (km/h)",
-                    onClick = {},
-                    textColor = Color.Black,
-                    secondaryTextColor = Color.Gray
-                )
-                Divider(color = Color.LightGray.copy(alpha = 0.5f), thickness = 0.5.dp)
-                UnitItem(
-                    label = "Áp suất không khí",
-                    selectedValue = "Hectopascal (hPa)",
-                    onClick = {},
-                    textColor = Color.Black,
-                    secondaryTextColor = Color.Gray
-                )
-            }
-        }
-        
-        // Notifications section
-        Card(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(vertical = 8.dp),
-            colors = CardDefaults.cardColors(
-                containerColor = Color.White.copy(alpha = 0.9f)
-            ),
-            shape = RoundedCornerShape(12.dp)
-        ) {
-            Column(
-                modifier = Modifier.padding(16.dp)
-            ) {
-                Text(
-                    text = "Thông báo",
-                    fontSize = 18.sp,
-                    fontWeight = FontWeight.Medium,
-                    color = Color(0xFF5372dc),
-                    modifier = Modifier.padding(bottom = 12.dp)
-                )
-                
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(vertical = 8.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(
-                        text = "Dự báo hàng ngày",
-                        fontSize = 14.sp,
-                        color = Color(0xFF5372dc)
-                    )
-                    Switch(
-                        checked = true,
-                        onCheckedChange = {},
-                        colors = SwitchDefaults.colors(
-                            checkedThumbColor = Color(0xFF5372dc),
-                            checkedTrackColor = Color(0xFF5372dc).copy(alpha = 0.5f)
-                        )
-                    )
-                }
-                
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(vertical = 8.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(
-                        text = "Cảnh báo mưa",
-                        fontSize = 14.sp,
-                        color = Color(0xFF5372dc)
-                    )
-                    Switch(
-                        checked = false,
-                        onCheckedChange = {},
-                        colors = SwitchDefaults.colors(
-                            checkedThumbColor = Color(0xFF5372dc),
-                            checkedTrackColor = Color(0xFF5372dc).copy(alpha = 0.5f)
-                        )
-                    )
-                }
-            }
-        }
-    }
-}
-

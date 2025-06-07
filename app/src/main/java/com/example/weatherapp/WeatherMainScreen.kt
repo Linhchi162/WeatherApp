@@ -1,7 +1,4 @@
 package com.example.weatherapp
-
-import com.example.weatherapp.R
-
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
@@ -9,8 +6,6 @@ import android.content.IntentFilter
 import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
 import android.util.Log
-import android.widget.Toast
-
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -19,19 +14,15 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.foundation.lazy.items // Import items for LazyColumn/LazyRow
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.core.FastOutSlowInEasing
-import androidx.compose.animation.core.RepeatMode
-import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.AnimatedVisibility
-
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.ui.window.Dialog
@@ -39,130 +30,77 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
-
-import androidx.compose.ui.geometry.Size // Import Size for Canvas
-
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.Path
-import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.StrokeCap
-import androidx.compose.ui.graphics.drawscope.DrawScope
-import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
-
 import androidx.compose.ui.tooling.preview.Preview
-
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.viewmodel.compose.viewModel
-
 import androidx.localbroadcastmanager.content.LocalBroadcastManager
-
 import com.google.accompanist.pager.ExperimentalPagerApi
 import com.google.accompanist.pager.HorizontalPager
 import com.google.accompanist.pager.rememberPagerState
 import com.google.accompanist.swiperefresh.SwipeRefresh
 import com.google.accompanist.swiperefresh.SwipeRefreshIndicator
 import com.google.accompanist.swiperefresh.rememberSwipeRefreshState
-
 import com.google.android.gms.maps.MapView
 import com.google.android.gms.maps.CameraUpdateFactory
 import com.google.android.gms.maps.model.LatLng
 import com.google.android.gms.maps.model.LatLngBounds
 import com.google.android.gms.maps.model.GroundOverlayOptions
 import com.google.android.gms.maps.model.BitmapDescriptorFactory
-import com.google.android.gms.maps.model.GroundOverlay
 import com.google.android.gms.maps.model.MarkerOptions
 import com.google.android.gms.maps.GoogleMap
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import java.net.URL
-
 import java.time.Instant
 import java.time.LocalDate
 import java.time.LocalDateTime
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
-import java.util.Locale
-
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlin.math.*
-
-import com.example.weatherapp.City
-import com.example.weatherapp.WeatherDataState
-import com.example.weatherapp.WeatherViewModel
-import com.example.weatherapp.UnitConverter
-
-import androidx.compose.foundation.gestures.detectDragGestures
-import androidx.compose.foundation.gestures.detectTapGestures
-import androidx.compose.foundation.gestures.Orientation
-import androidx.compose.foundation.gestures.draggable
-import androidx.compose.foundation.gestures.rememberDraggableState
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowBack
-import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.DragHandle
 import androidx.compose.material.icons.filled.Menu
-import androidx.compose.material.icons.filled.MenuOpen
 import androidx.compose.material.icons.filled.FilterList
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.LocationCity
-import androidx.compose.material.SwipeToDismiss
-import androidx.compose.material.DismissDirection
-import androidx.compose.material.DismissValue
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
-import androidx.compose.material.rememberDismissState
-import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.consumeAllChanges
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
-import java.util.Collections
-import android.Manifest
-import android.content.pm.PackageManager
-import android.location.Location
-import android.location.LocationManager
-import androidx.core.content.ContextCompat
 import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.res.painterResource
-import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.lifecycle.ViewModelProvider
 import androidx.activity.ComponentActivity
 import androidx.compose.foundation.layout.*
 import androidx.compose.ui.unit.*
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.layout.onSizeChanged
-import kotlin.math.roundToInt // Added for rounding
-import androidx.compose.foundation.BorderStroke
+import kotlin.math.roundToInt
 import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
-import androidx.compose.foundation.gestures.scrollBy
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.input.pointer.util.VelocityTracker
 import androidx.compose.ui.zIndex
-import kotlinx.coroutines.Job
-import kotlinx.coroutines.launch
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import androidx.compose.material.icons.filled.ArrowDropDown
 
-// ========== Utility Functions ==========
-// Hàm kiểm tra mạng
+
 @Composable
 fun isNetworkAvailable(context: Context): Boolean {
     val connectivityManager = context.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
@@ -173,7 +111,6 @@ fun isNetworkAvailable(context: Context): Boolean {
             capabilities.hasTransport(NetworkCapabilities.TRANSPORT_ETHERNET)
 }
 
-// Format timestamp
 fun formatTimestamp(timestamp: Long): String {
     return try {
         Instant.ofEpochMilli(timestamp)
@@ -185,16 +122,14 @@ fun formatTimestamp(timestamp: Long): String {
     }
 }
 
-// Weather icon function
 @Composable
 fun getWeatherIcon(code: Int): Int {
-    // Kiểm tra thời gian hiện tại
+
     val isNightTime = remember {
         val currentHour = java.time.LocalTime.now().hour
-        currentHour < 6 || currentHour >= 18 // Đêm từ 18:00 đến 6:00
+        currentHour < 6 || currentHour >= 18
     }
-    
-    // Nên dùng remember
+
     return remember(code, isNightTime) {
         when (code) {
             0 -> if (isNightTime) R.drawable.clear_night else R.drawable.sunny // Nắng rõ / Đêm quang
@@ -217,36 +152,7 @@ fun getWeatherIcon(code: Int): Int {
     }
 }
 
-// Weather description
-fun getWeatherDescription(code: Int): String {
-    return when (code) {
-        0 -> "Trời quang"
-        1 -> "Nắng nhẹ"
-        2 -> "Mây rải rác"
-        3 -> "Nhiều mây"
-        45, 48 -> "Sương mù"
-        51, 53, 55 -> "Mưa phùn"
-        56, 57 -> "Mưa phùn đông đá"
-        61 -> "Mưa nhỏ"
-        63 -> "Mưa vừa"
-        65 -> "Mưa to"
-        66, 67 -> "Mưa đông đá"
-        71 -> "Tuyết rơi nhẹ"
-        73 -> "Tuyết rơi vừa"
-        75 -> "Tuyết rơi dày"
-        77 -> "Hạt tuyết"
-        80 -> "Mưa rào nhẹ"
-        81 -> "Mưa rào vừa"
-        82 -> "Mưa rào dữ dội"
-        85 -> "Mưa tuyết nhẹ"
-        86 -> "Mưa tuyết nặng"
-        95 -> "Dông"
-        96, 99 -> "Dông có mưa đá"
-        else -> "Không xác định"
-    }
-}
 
-// Calculate percentage function for AQI
 fun calculatePercentage(value: Int, minRange: Int, maxRange: Int, totalSegments: Int): Float {
     val segmentIndex = when {
         value <= 50 -> 0
@@ -256,17 +162,15 @@ fun calculatePercentage(value: Int, minRange: Int, maxRange: Int, totalSegments:
         value <= 300 -> 4
         else -> 5
     }
-    // Tính toán vị trí tương đối trong đoạn hiện tại
     val valueInRange = value.coerceIn(minRange, maxRange)
-    val rangeSize = (maxRange - minRange).toFloat().coerceAtLeast(1f) // Tránh chia cho 0
+    val rangeSize = (maxRange - minRange).toFloat().coerceAtLeast(1f)
     val positionInSegment = (valueInRange - minRange) / rangeSize
 
-    // Tính toán phần trăm tổng thể
     val segmentWidthPercentage = 1f / totalSegments
     return (segmentIndex * segmentWidthPercentage) + (positionInSegment * segmentWidthPercentage)
 }
 
-// Get AQI info
+
 fun getAqiInfo(aqi: Int): Triple<String, Color, Float> {
     return when (aqi) {
         in 0..50 -> Triple("Tốt", Color(0xFF6BD56B), calculatePercentage(aqi, 0, 50, 6))
@@ -278,7 +182,7 @@ fun getAqiInfo(aqi: Int): Triple<String, Color, Float> {
     }
 }
 
-// Get AQI recommendation
+
 fun getAqiRecommendation(description: String): String {
     return when (description) {
         "Tốt" -> "Chất lượng không khí rất tốt. Tận hưởng các hoạt động ngoài trời!"
@@ -291,36 +195,6 @@ fun getAqiRecommendation(description: String): String {
     }
 }
 
-// Calculate sun position for animation
-fun calculateSunPosition(currentHour: Int, currentMinute: Int, sunriseHour: Int, sunriseMinute: Int, sunsetHour: Int, sunsetMinute: Int): Float {
-    val currentTimeInMinutes = currentHour * 60 + currentMinute
-    val sunriseTimeInMinutes = sunriseHour * 60 + sunriseMinute
-    val sunsetTimeInMinutes = sunsetHour * 60 + sunsetMinute
-    
-    return when {
-        currentTimeInMinutes < sunriseTimeInMinutes -> 0f // Before sunrise
-        currentTimeInMinutes > sunsetTimeInMinutes -> 1f // After sunset
-        else -> {
-            // During the day
-            val dayDuration = sunsetTimeInMinutes - sunriseTimeInMinutes
-            val timeSinceSunrise = currentTimeInMinutes - sunriseTimeInMinutes
-            (timeSinceSunrise.toFloat() / dayDuration.toFloat()).coerceIn(0f, 1f)
-        }
-    }
-}
-
-// Get sunrise and sunset times (simplified calculation or use default times)
-fun getSunTimes(latitude: Double): Pair<Pair<Int, Int>, Pair<Int, Int>> {
-    // Simplified calculation based on latitude - in real app you'd use proper sun calculation
-    val baseOffset = (latitude / 90.0 * 2).coerceIn(-2.0, 2.0) // Max 2 hours offset
-    
-    val sunriseHour = (6 - baseOffset.toInt()).coerceIn(4, 8)
-    val sunsetHour = (18 + baseOffset.toInt()).coerceIn(16, 20)
-    
-    return Pair(Pair(sunriseHour, 0), Pair(sunsetHour, 0))
-}
-
-// Thêm hàm formatTime
 fun formatTime(isoTime: String): String {
     return try {
         val dateTime = LocalDateTime.parse(isoTime, DateTimeFormatter.ISO_DATE_TIME)
@@ -330,7 +204,6 @@ fun formatTime(isoTime: String): String {
     }
 }
 
-// Helper để loại bỏ tiền tố 'Quận', 'Huyện', 'Thị xã', 'Thành phố', 'Phường', 'Xã', 'Thị trấn' khỏi tên vị trí
 fun cleanLocationName(name: String): String {
     val prefixes = listOf("Quận ", "Huyện ", "Thị xã ", "Thành phố ", "Phường ", "Xã ", "Thị trấn ")
     var result = name
@@ -343,8 +216,6 @@ fun cleanLocationName(name: String): String {
     return result.trim()
 }
 
-// ========== Reusable UI Components ==========
-// Air Quality Bar composable
 @Composable
 fun AirQualityBar(percentage: Float) {
     val barHeight = 8.dp
@@ -392,7 +263,6 @@ fun AirQualityBar(percentage: Float) {
     }
 }
 
-// Offline Screen composable
 @Composable
 fun OfflineScreen(lastUpdateTime: Long?, isNightTime: Boolean) {
     val iconColor = if (isNightTime) Color.White else Color(0xFF5372dc)
@@ -425,7 +295,7 @@ fun OfflineScreen(lastUpdateTime: Long?, isNightTime: Boolean) {
     }
 }
 
-// Loading or Error Screen composable
+
 @Composable
 fun LoadingOrErrorScreen(errorMessage: String?, lastUpdateTime: Long?, isNightTime: Boolean) {
     val iconColor = if (isNightTime) Color.White else Color(0xFF5372dc)
@@ -1087,7 +957,6 @@ fun SunInfoSection(city: City, viewModel: WeatherViewModel) {
                 }
             }
             
-            // Calculate icon position
             val iconActualLeftPx = remember(progress, boxWidth, iconSizePx) {
                 if (boxWidth > 0) {
                     val targetCenterPx = progress * boxWidth

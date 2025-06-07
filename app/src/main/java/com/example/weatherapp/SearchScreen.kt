@@ -1,5 +1,4 @@
-                                                                        package com.example.weatherapp
-
+package com.example.weatherapp
 
 import android.util.Log
 import androidx.compose.foundation.background
@@ -22,7 +21,6 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
-
 import androidx.compose.ui.zIndex
 import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.border
@@ -37,7 +35,6 @@ import java.time.LocalTime
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.fadeOut
-
 
 @Composable
 fun SearchScreen(
@@ -58,17 +55,17 @@ fun SearchScreen(
     var showCountryDropdown by remember { mutableStateOf(false) }
     var isLoading by remember { mutableStateOf(false) }
     
-    // Biến state riêng cho phần tìm kiếm quốc gia trong màn hình lọc
+
     var filterCountryQuery by remember { mutableStateOf("") }
     var countrySuggestions by remember { mutableStateOf<List<PlaceSuggestion>>(emptyList()) }
     var isSearchingCountry by remember { mutableStateOf(false) }
     var countrySearchError by remember { mutableStateOf<String?>(null) }
     var searchCountryJob by remember { mutableStateOf<kotlinx.coroutines.Job?>(null) }
     
-    // Sử dụng danh sách quốc gia từ API thay vì hardcode
+
     val apiCountries = viewModel.availableCountries.map { it.countryName }
     
-    // Danh sách quốc gia mặc định (fallback khi API chưa load xong)
+
     val defaultCountries = listOf(
         "Việt Nam", 
         "Hoa Kỳ", 
@@ -92,12 +89,12 @@ fun SearchScreen(
         "Thái Lan"
     )
     
-    // Sử dụng danh sách từ API nếu có, nếu không thì dùng danh sách mặc định
+
     val countriesToUse = if (apiCountries.isNotEmpty()) apiCountries else defaultCountries
     
-    // Danh sách làm dự phòng khi API lỗi
+
     val localFilteredCountries = if (filterCountryQuery.isBlank()) {
-        // Nếu truy vấn trống, hiển thị tất cả quốc gia
+
         countriesToUse.map { country -> 
             PlaceSuggestion(
                 formattedName = country,
@@ -108,7 +105,7 @@ fun SearchScreen(
             )
         }
     } else {
-        // Nếu có truy vấn, lọc quốc gia phù hợp với truy vấn
+
         countriesToUse.filter { 
             it.lowercase().contains(filterCountryQuery.lowercase()) 
         }.map { country ->
@@ -124,12 +121,12 @@ fun SearchScreen(
     
     val weatherStates = listOf("Tất cả", "Nắng", "Mưa", "Nhiều mây", "Sương mù", "Tuyết")
 
-    // Hàm tìm kiếm quốc gia độc lập, không sử dụng state của ViewModel
+
     fun searchCountry(query: String) {
         val cleanQuery = query.trim()
         Log.d("SearchScreen", "searchCountry gọi với query: '$cleanQuery'")
         
-        // Lọc danh sách local ngay lập tức (sử dụng countriesToUse thay vì defaultCountries)
+
         val filteredLocalCountries = countriesToUse.filter { 
             it.lowercase().contains(cleanQuery.lowercase()) 
         }.map { country ->
@@ -142,17 +139,17 @@ fun SearchScreen(
             )
         }
         
-        // Hiển thị kết quả tìm kiếm local ngay lập tức
+
         countrySuggestions = filteredLocalCountries
         
-        // Cập nhật thông báo lỗi nếu không tìm thấy kết quả local
+
         if (filteredLocalCountries.isEmpty() && cleanQuery.isNotEmpty()) {
             countrySearchError = "Không tìm thấy quốc gia phù hợp"
         } else {
             countrySearchError = null
         }
         
-        // Chỉ gọi API nếu query đủ dài
+
         if (cleanQuery.length < 2) {
             isSearchingCountry = false
             return
@@ -160,30 +157,30 @@ fun SearchScreen(
         
         isSearchingCountry = true
         
-        // Hủy job tìm kiếm trước đó nếu đang chạy
+
         searchCountryJob?.cancel()
         
         searchCountryJob = viewModel.viewModelScope.launch {
-            delay(300) // Debounce để giảm số lượng request
+            delay(300)
             try {
-                // Gọi API GeoNames để tìm quốc gia
+
                 val response = withContext(Dispatchers.IO) {
                     viewModel.geoNamesApi.getCitiesByCountry(
-                        countryCode = "", // Để trống để tìm toàn cầu
-                        featureClass = "A", // A là khu vực hành chính (qua featureClass)
+                        countryCode = "",
+                        featureClass = "A",
                         maxRows = 10,
-                        orderBy = "relevance", // Sắp xếp theo độ liên quan
+                        orderBy = "relevance",
                         username = RetrofitInstance.GEONAMES_USERNAME,
-                        q = cleanQuery // Sử dụng fulltext search thay cho nameStartsWith
+                        q = cleanQuery
                     )
                 }
                 
-                // Xử lý kết quả trả về từ GeoNames
+
                 val apiSuggestions = response.geonames?.mapNotNull { geoCity ->
-                    // Chỉ lấy các kết quả là quốc gia (fcode="PCLI")
+
                     if (geoCity.fcode == "PCLI") {
                         PlaceSuggestion(
-                            formattedName = geoCity.name, // Tên gọn gàng cho quốc gia
+                            formattedName = geoCity.name,
                             city = null,
                             country = geoCity.countryName,
                             latitude = geoCity.lat.toDoubleOrNull(),
@@ -192,11 +189,11 @@ fun SearchScreen(
                     } else null
                 } ?: emptyList()
                 
-                // Kết hợp kết quả từ API với danh sách local đã lọc
+
                 val combinedResults = (apiSuggestions + filteredLocalCountries)
-                    .distinctBy { it.formattedName } // Loại bỏ trùng lặp
+                    .distinctBy { it.formattedName }
                 
-                // Cập nhật state local
+
                 countrySuggestions = combinedResults
                 countrySearchError = if (combinedResults.isEmpty() && query.isNotEmpty()) {
                     "Không tìm thấy quốc gia phù hợp"
@@ -204,7 +201,7 @@ fun SearchScreen(
                 
             } catch (e: Exception) {
                 Log.e("SearchScreen", "Lỗi tìm kiếm quốc gia: ${e.message}", e)
-                // Vẫn giữ lại kết quả local nếu API lỗi
+
                 if (filteredLocalCountries.isEmpty() && query.isNotEmpty()) {
                     countrySearchError = "Không tìm thấy quốc gia phù hợp"
                 }
@@ -214,11 +211,11 @@ fun SearchScreen(
         }
     }
 
-    // Dark mode detection based on time
+
     val currentTime = LocalTime.now()
     val isDarkMode = currentTime.hour < 6 || currentTime.hour >= 18
     
-    // Colors based on theme
+
     val backgroundColor = if (isDarkMode) {
         Brush.verticalGradient(
             colors = listOf(Color(0xFF475985), Color(0xFF5F4064))
@@ -241,13 +238,13 @@ fun SearchScreen(
     var showCountryError by remember { mutableStateOf(false) }
     var errorAlpha by remember { mutableStateOf(1f) }
 
-    // Xác định range và nhãn động cho nhiệt độ
+
     val (tempMin, tempMax, tempLabel) = when (temperatureUnit) {
         UnitConverter.TemperatureUnit.CELSIUS -> Triple(-20f, 50f, "°C")
         UnitConverter.TemperatureUnit.FAHRENHEIT -> Triple(-4f, 122f, "°F")
         else -> Triple(-20f, 50f, "°C")
     }
-    // Xác định range và nhãn động cho gió
+
     val (windMin, windMax, windLabel) = when (windSpeedUnit) {
         UnitConverter.WindSpeedUnit.KMH -> Triple(0f, 100f, "km/h")
         UnitConverter.WindSpeedUnit.MS -> Triple(0f, 28f, "m/s")
@@ -257,7 +254,7 @@ fun SearchScreen(
         UnitConverter.WindSpeedUnit.FTS -> Triple(0f, 91f, "ft/s")
         else -> Triple(0f, 100f, "km/h")
     }
-    // Khi đổi đơn vị, tự động convert lại giá trị range đang chọn và cập nhật vào ViewModel
+
     LaunchedEffect(temperatureUnit) {
         val old = temperatureRange
         val newRange = when (temperatureUnit) {
@@ -287,7 +284,7 @@ fun SearchScreen(
         }
     }
 
-    // Hiển thị màn hình loading nếu đang lọc
+
     if (isLoading) {
         Dialog(onDismissRequest = { /* Không cho dismiss khi đang loading */ }) {
             Box(
@@ -312,7 +309,7 @@ fun SearchScreen(
     }
 
     Box(modifier = Modifier.fillMaxSize()) {
-        // Overlay thông báo lỗi
+
         AnimatedVisibility(
             visible = showCountryError,
             exit = fadeOut()
@@ -341,7 +338,7 @@ fun SearchScreen(
             }
         }
 
-        // Dialog chính
+
     Dialog(onDismissRequest = onDismiss) {
         Column(
             modifier = Modifier
@@ -353,7 +350,7 @@ fun SearchScreen(
                 )
                 .padding(20.dp)
         ) {
-            // Tiêu đề và nút quay lại
+
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -381,13 +378,13 @@ fun SearchScreen(
                 Spacer(modifier = Modifier.width(40.dp))
             }
 
-            // Content trong ScrollableColumn để tránh overflow
+
             LazyColumn(
                 modifier = Modifier.weight(1f),
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
                 item {
-                    // Thanh tìm kiếm quốc gia
+
                     Column {
                         Text(
                             text = "Quốc gia",
@@ -425,7 +422,7 @@ fun SearchScreen(
                     }
                 }
 
-                // Country suggestions (if any)
+
                 item {
                     val showCountrySuggest = filterCountryQuery.isNotEmpty()
                     if (showCountrySuggest) {
@@ -492,7 +489,7 @@ fun SearchScreen(
                 }
 
                 item {
-                    // Bộ lọc nhiệt độ
+
                     Column {
                         Text(
                             text = "Nhiệt độ (${temperatureRange.start.toInt()}$tempLabel - ${temperatureRange.endInclusive.toInt()}$tempLabel)",
@@ -516,7 +513,7 @@ fun SearchScreen(
                 }
 
                 item {
-                    // Bộ lọc tốc độ gió
+
                     Column {
                         Text(
                             text = "Tốc độ gió (${windSpeedRange.start.toInt()} - ${windSpeedRange.endInclusive.toInt()} $windLabel)",
@@ -540,7 +537,7 @@ fun SearchScreen(
                 }
 
                 item {
-                    // Bộ lọc độ ẩm
+
                     Column {
                         Text(
                             text = "Độ ẩm (${humidityRange.start.toInt()}% - ${humidityRange.endInclusive.toInt()}%)",
@@ -564,7 +561,7 @@ fun SearchScreen(
                 }
 
                 item {
-                    // Bộ lọc trạng thái thời tiết
+
                     Column {
                         Text(
                             text = "Trạng thái thời tiết",
@@ -623,7 +620,7 @@ fun SearchScreen(
                 }
             }
 
-            // Nút áp dụng bộ lọc - cố định ở dưới
+
             Spacer(modifier = Modifier.height(16.dp))
             Button(
                 onClick = {
@@ -670,14 +667,3 @@ fun SearchScreen(
         }
     }
 }
-
-@Preview(showBackground = true)
-@Composable
-fun SearchScreenPreview() {
-    // Sử dụng các giá trị mặc định/mock cho preview
-    Box(modifier = Modifier.fillMaxSize().background(Color.LightGray)) {
-        Text("Search Screen Preview", modifier = Modifier.align(Alignment.Center))
-    }
-}
-
-

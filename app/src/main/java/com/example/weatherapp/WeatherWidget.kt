@@ -100,7 +100,7 @@ private fun WeatherWidgetContent(context: Context) {
                 horizontalAlignment = GlanceAlignment.CenterHorizontally,
                 modifier = GlanceModifier.fillMaxSize()
             ) {
-                // City name
+
                 Text(
                     text = weatherData.value!!.cityName,
                     style = TextStyle(
@@ -113,7 +113,7 @@ private fun WeatherWidgetContent(context: Context) {
                     ),
                     modifier = GlanceModifier.padding(bottom = 4.dp)
                 )
-                // Temperature and weather icon
+
                 Row(
                     verticalAlignment = GlanceAlignment.CenterVertically,
                     modifier = GlanceModifier.padding(bottom = 4.dp)
@@ -135,7 +135,7 @@ private fun WeatherWidgetContent(context: Context) {
                         modifier = GlanceModifier.size(48.dp).padding(start = 8.dp)
                     )
                 }
-                // High/Low temperatures
+
                 Row(
                     horizontalAlignment = GlanceAlignment.CenterHorizontally
                 ) {
@@ -162,7 +162,7 @@ private fun WeatherWidgetContent(context: Context) {
                         )
                     )
                 }
-                // Last updated
+
                 weatherData.value!!.lastUpdated?.let { timestamp ->
                     Text(
                         text = formatWidgetTimestamp(timestamp),
@@ -225,7 +225,7 @@ private fun HourlyWeatherWidgetContent(context: Context) {
                 horizontalAlignment = GlanceAlignment.CenterHorizontally,
                 modifier = GlanceModifier.fillMaxSize()
             ) {
-                // Header
+
                 Row(
                     horizontalAlignment = GlanceAlignment.CenterHorizontally,
                     verticalAlignment = GlanceAlignment.CenterVertically
@@ -254,7 +254,7 @@ private fun HourlyWeatherWidgetContent(context: Context) {
                     )
                 }
 
-                // Hourly forecast
+
                 Row(
                     horizontalAlignment = GlanceAlignment.CenterHorizontally,
                     modifier = GlanceModifier.padding(top = 8.dp)
@@ -473,150 +473,4 @@ data class HourlyForecast(
     val weatherCode: Int
 )
 
-// Preview Components (using regular Compose for preview purposes)
-@Preview(showBackground = true)
-@Composable
-fun WeatherWidgetPreview() {
-    Card(
-        modifier = Modifier
-            .width(220.dp)
-            .height(140.dp)
-            .padding(4.dp),
-        colors = CardDefaults.cardColors(
-            containerColor = Color(0xFF6650a4)
-        ),
-        shape = RoundedCornerShape(16.dp)
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(10.dp),
-            verticalArrangement = Arrangement.SpaceBetween
-        ) {
-            // Header with city name and last updated
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.Top
-            ) {
-                Text(
-                    text = "Hà Nội",
-                    style = MaterialTheme.typography.titleMedium,
-                    color = Color.White,
-                    fontWeight = FontWeight.Bold
-                )
-                Text(
-                    text = "14:30",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = Color.White.copy(alpha = 0.8f)
-                )
-            }
-            // Current weather
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Column {
-                    Text(
-                        text = "25°",
-                        style = MaterialTheme.typography.headlineLarge,
-                        color = Color.White,
-                        fontWeight = FontWeight.Bold
-                    )
-                    Text(
-                        text = "H:28° L:22°",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = Color.White.copy(alpha = 0.8f)
-                    )
-                }
-                Image(
-                    painter = painterResource(id = R.drawable.sunny),
-                    contentDescription = "Weather icon",
-                    modifier = Modifier.size(48.dp)
-                )
-            }
-        }
-    }
-}
 
-@Preview(showBackground = true)
-@Composable
-fun HourlyWeatherWidgetPreview() {
-    Card(
-        modifier = Modifier
-            .width(340.dp)
-            .height(160.dp)
-            .padding(4.dp),
-        colors = CardDefaults.cardColors(
-            containerColor = Color(0xFF625b71)
-        ),
-        shape = RoundedCornerShape(16.dp)
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(12.dp),
-            verticalArrangement = Arrangement.SpaceBetween
-        ) {
-            // Header
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    text = "Hà Nội",
-                    style = MaterialTheme.typography.titleMedium,
-                    color = Color.White,
-                    fontWeight = FontWeight.Bold
-                )
-                Text(
-                    text = "25°",
-                    style = MaterialTheme.typography.headlineMedium,
-                    color = Color.White,
-                    fontWeight = FontWeight.Bold
-                )
-            }
-            Spacer(modifier = Modifier.height(8.dp))
-            // Hourly forecast
-            LazyRow(
-                horizontalArrangement = Arrangement.spacedBy(16.dp)
-            ) {
-                items(5) { index ->
-                    val times = listOf("Now", "15:00", "16:00", "17:00", "18:00")
-                    val temps = listOf("25°", "26°", "24°", "23°", "22°")
-                    val icons = listOf(
-                        R.drawable.sunny,
-                        R.drawable.cloudy_with_sun,
-                        R.drawable.cloudy,
-                        R.drawable.rainingg,
-                        R.drawable.cloudy
-                    )
-                    Column(
-                        horizontalAlignment = Alignment.CenterHorizontally
-                    ) {
-                        Text(
-                            text = times[index],
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = Color.White.copy(alpha = 0.8f)
-                        )
-                        Spacer(modifier = Modifier.height(6.dp))
-                        Image(
-                            painter = painterResource(id = icons[index]),
-                            contentDescription = null,
-                            modifier = Modifier.size(32.dp)
-                        )
-                        Spacer(modifier = Modifier.height(6.dp))
-                        Text(
-                            text = temps[index],
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = Color.White,
-                            fontWeight = FontWeight.Medium
-                        )
-                    }
-                }
-            }
-        }
-    }
-} 

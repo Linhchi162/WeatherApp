@@ -46,17 +46,17 @@ class WeatherUpdateWorker(
                         longitude = city.longitude
                     )
 
-                    // Get previous weather data for comparison
+
                     val previousData = weatherDao.getLatestWeatherDataWithDailyDetailsForCity(city.name)
                     val today = LocalDate.now()
                     val tomorrow = today.plusDays(1)
 
-                    // Delete old data
+
                     weatherDao.deleteWeatherDataForCity(city.name)
                     weatherDao.deleteWeatherDetailsForCity(city.name)
                     weatherDao.deleteDailyDetailsForCity(city.name)
 
-                    // Insert new data
+
                     val weatherData = WeatherData(
                         cityName = city.name,
                         latitude = city.latitude,
@@ -99,7 +99,7 @@ class WeatherUpdateWorker(
                     }
                     weatherDao.insertWeatherDailyDetails(dailyDetails)
 
-                    // Log sunrise and sunset times
+
                     response.daily.sunrise.forEachIndexed { index, sunrise ->
                         val sunset = response.daily.sunset[index]
                         Log.d("WeatherUpdateWorker", "Sunrise for ${city.name} on ${response.daily.time[index]}: $sunrise")
@@ -109,7 +109,7 @@ class WeatherUpdateWorker(
                     Log.d("WeatherUpdateWorker", "Lưu ${hourlyDetails.size} WeatherDetail thành công cho ${city.name}")
                     Log.d("WeatherUpdateWorker", "Lưu ${dailyDetails.size} WeatherDailyDetail thành công cho ${city.name}")
 
-                    // Compare with previous data
+
                     if (previousData != null) {
                         val prevDailyDetails = previousData.dailyDetails
                         dailyDetails.forEach { newDetail ->

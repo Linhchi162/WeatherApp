@@ -6,21 +6,21 @@ import kotlin.math.roundToLong
 
 object UnitConverter {
 
-    // Enum để định nghĩa các đơn vị
+
     enum class TemperatureUnit { CELSIUS, FAHRENHEIT }
     enum class WindSpeedUnit { KMH, BEAUFORT, MS, FTS, MPH, KNOTS }
     enum class PressureUnit { HPA, MMHG, INHG, MB, PSI }
     enum class VisibilityUnit { KM, MI, M, FT }
 
-    // Chuyển đổi nhiệt độ
+
     fun convertTemperature(value: Double, toUnit: TemperatureUnit): Double {
         return when (toUnit) {
-            TemperatureUnit.CELSIUS -> value // API trả về °C
+            TemperatureUnit.CELSIUS -> value
             TemperatureUnit.FAHRENHEIT -> (value * 9 / 5) + 32
         }
     }
 
-    // Chuyển đổi tốc độ gió
+
     fun convertWindSpeed(value: Double, toUnit: WindSpeedUnit): String {
         return when (toUnit) {
             WindSpeedUnit.KMH -> "${value.roundToInt()} km/h"
@@ -49,18 +49,18 @@ object UnitConverter {
         }
     }
 
-    // Chuyển đổi áp suất
+
     fun convertPressure(value: Double, toUnit: PressureUnit): String {
         return when (toUnit) {
             PressureUnit.HPA -> "${value.roundToInt()} hPa"
             PressureUnit.MMHG -> "${(value * 0.75006).roundToInt()} mmHg"
             PressureUnit.INHG -> "${(value * 0.02953).roundToInt()} inHg"
-            PressureUnit.MB -> "${value.roundToInt()} mb" // 1 hPa = 1 mb
+            PressureUnit.MB -> "${value.roundToInt()} mb"
             PressureUnit.PSI -> "${(value * 0.0145038).roundToInt()} psi"
         }
     }
 
-    // Chuyển đổi tầm nhìn
+
     fun convertVisibility(value: Double, toUnit: VisibilityUnit): String {
         return when (toUnit) {
             VisibilityUnit.KM -> "${(value / 1000).roundToInt()} km"

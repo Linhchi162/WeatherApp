@@ -3,7 +3,7 @@ package com.example.weatherapp
 import retrofit2.http.GET
 import retrofit2.http.Query
 
-// --- Data Classes (GeoapifyAutocompleteResponse, GeoFeature, etc.) giữ nguyên ---
+
 data class GeoapifyAutocompleteResponse(
     val features: List<GeoFeature>?,
 )
@@ -34,7 +34,7 @@ data class GeoGeometry(
 )
 
 
-// --- Retrofit Service Interface ---
+
 
 interface GeoapifyService {
 
@@ -45,6 +45,6 @@ interface GeoapifyService {
         @Query("lang") language: String = "vi",
         @Query("limit") limit: Int = 10,
         @Query("type") type: String = "street,district,suburb,locality,place",
-        // @Query("filter") filter: String = "countrycode:vn" // Có thể bỏ comment dòng này nếu chỉ muốn tìm ở VN
+
     ): GeoapifyAutocompleteResponse
 }

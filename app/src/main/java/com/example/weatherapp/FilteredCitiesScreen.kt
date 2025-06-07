@@ -45,7 +45,6 @@ fun FilteredCitiesScreen(
     var isLoadingData by remember { mutableStateOf(false) }
     var loadingTimeoutReached by remember { mutableStateOf(false) }
     
-    // DisposableEffect để đảm bảo reset kết quả lọc khi màn hình này bị hủy
     DisposableEffect(Unit) {
         onDispose {
             Log.d("FilteredCitiesScreen", "Màn hình FilteredCitiesScreen bị hủy - reset kết quả lọc")
@@ -53,13 +52,10 @@ fun FilteredCitiesScreen(
         }
     }
     
-    // Danh sách thành phố để hiển thị (sử dụng filteredCities thay vì citiesList)
     val allFilteredCities = viewModel.filteredCities
     
-    // Lọc các thành phố theo trạng thái thời tiết
     val displayCities = remember(allFilteredCities, viewModel.weatherDataMap, viewModel.weatherStateFilter) {
         if (viewModel.weatherStateFilter == "Tất cả") {
-            // Lọc bỏ các quận/huyện/phường/xã
             allFilteredCities.filter { city ->
                 val name = city.name.lowercase()
                 !name.contains("quận") && 
@@ -71,7 +67,6 @@ fun FilteredCitiesScreen(
             }
         } else {
             allFilteredCities.filter { city ->
-                // Lọc bỏ các quận/huyện/phường/xã
                 val name = city.name.lowercase()
                 if (name.contains("quận") || 
                     name.contains("huyện") || 
@@ -88,24 +83,20 @@ fun FilteredCitiesScreen(
                     val description = WeatherUtils.getWeatherDescription(weatherCode, city.name)
                     val timeString = data.timeList.getOrNull(index) ?: ""
                     
-                    // Kiểm tra trạng thái thời tiết theo mã trước
                     val codeMatches = doesWeatherCodeMatchFilter(weatherCode, viewModel.weatherStateFilter)
                     
-                    // Nếu không khớp theo mã, thử khớp theo mô tả
-                    val descMatches = if (!codeMatches) 
+                    val descMatches = if (!codeMatches)
                         doesWeatherMatchFilter(description, viewModel.weatherStateFilter, timeString)
                     else true
                     
                     val matches = codeMatches || descMatches
                     
-                    // Thêm log chi tiết để debug
                     Log.d("FilteredCitiesScreen", "Thành phố ${city.name} với mô tả '$description' (code=$weatherCode): " +
                           "codeMatches=$codeMatches, descMatches=$descMatches, finalMatch=$matches")
                     
-                    // Chỉ giữ lại những thành phố khớp với bộ lọc thời tiết
                     matches
                 } else {
-                    false // Bỏ qua các thành phố đang tải dữ liệu
+                    false
                     }
                 }
             }
@@ -114,17 +105,13 @@ fun FilteredCitiesScreen(
     
     Log.d("FilteredCitiesScreen", "Opening FilteredCitiesScreen with ${displayCities.size} filtered cities")
     
-    // Kiểm tra nếu có thành phố chưa có dữ liệu thời tiết
     LaunchedEffect(allFilteredCities) {
         isLoadingData = allFilteredCities.any { city ->
             viewModel.weatherDataMap[city.name] == null || 
             viewModel.weatherDataMap[city.name]?.timeList?.isEmpty() == true
         }
         
-        // Reset trạng thái timeout khi có danh sách thành phố mới
         loadingTimeoutReached = false
-        
-        // Tự động tải dữ liệu thời tiết cho các thành phố chưa có dữ liệu
         if (isLoadingData) {
             Log.d("FilteredCitiesScreen", "Some cities missing weather data, loading data...")
             allFilteredCities.forEach { city ->
@@ -135,22 +122,17 @@ fun FilteredCitiesScreen(
                 }
             }
             
-            // Thiết lập timeout để dừng loading sau 10 giây
             val startTime = System.currentTimeMillis()
             while (isLoadingData && !loadingTimeoutReached) {
-                // Kiểm tra lại trạng thái loading sau mỗi 500ms
                 delay(500)
                 
-                // Cập nhật trạng thái loading
                 isLoadingData = allFilteredCities.any { city ->
                     viewModel.weatherDataMap[city.name] == null || 
                     viewModel.weatherDataMap[city.name]?.timeList?.isEmpty() == true
                 }
                 
-                // Log trạng thái tải dữ liệu
                 Log.d("FilteredCitiesScreen", "Loading check: isLoading=$isLoadingData, timeout=${System.currentTimeMillis() - startTime > 10000}ms")
                 
-                // Kiểm tra timeout
                 if (System.currentTimeMillis() - startTime > 10000) {
                     Log.d("FilteredCitiesScreen", "Loading timeout reached after 10 seconds")
                     loadingTimeoutReached = true
@@ -173,7 +155,6 @@ fun FilteredCitiesScreen(
                 )
                 .padding(16.dp)
         ) {
-            // Tiêu đề và nút quay lại
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -196,8 +177,6 @@ fun FilteredCitiesScreen(
                 )
                 Spacer(modifier = Modifier.width(48.dp))
             }
-
-            // Hiển thị thông tin bộ lọc đã áp dụng (dạng tĩnh, không tương tác)
             Card(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -224,7 +203,6 @@ fun FilteredCitiesScreen(
                         fontSize = 14.sp,
                         color = if (isNightTime) Color.White else Color(0xFF5372dc)
                     )
-                    // Hiển thị nhiệt độ theo đơn vị
                     val tempSymbol = if (temperatureUnit == UnitConverter.TemperatureUnit.CELSIUS) "°C" else "°F"
                     val tempStart = viewModel.temperatureFilterRange.start.toInt()
                     val tempEnd = viewModel.temperatureFilterRange.endInclusive.toInt()
@@ -233,7 +211,6 @@ fun FilteredCitiesScreen(
                         fontSize = 14.sp,
                         color = if (isNightTime) Color.White else Color(0xFF5372dc)
                     )
-                    // Hiển thị tốc độ gió theo đơn vị
                     val windLabel = when (windSpeedUnit) {
                         UnitConverter.WindSpeedUnit.KMH -> "km/h"
                         UnitConverter.WindSpeedUnit.MS -> "m/s"
@@ -276,7 +253,6 @@ fun FilteredCitiesScreen(
                 }
             }
 
-            // Thêm card tổng kết kết quả lọc
             if (displayCities.isNotEmpty()) {
             Card(
                 modifier = Modifier
@@ -320,7 +296,6 @@ fun FilteredCitiesScreen(
                                     )
                                 }
                             }
-                    // Nút áp dụng bộ lọc mới
                     Button(
                         onClick = { onBackClick() },
                         colors = ButtonDefaults.buttonColors(
@@ -342,7 +317,6 @@ fun FilteredCitiesScreen(
                 }
             }
 
-            // Hiển thị loading nếu đang tải dữ liệu
             if (isLoadingData) {
                 Box(
                     modifier = Modifier
@@ -371,7 +345,6 @@ fun FilteredCitiesScreen(
                 }
             }
 
-            // Hiển thị loading khi đang lọc
             else if (viewModel.isFiltering) {
                 Box(
                     modifier = Modifier
@@ -383,7 +356,6 @@ fun FilteredCitiesScreen(
                 }
             }
             
-            // Hiển thị cảnh báo chỉ khi KHÔNG loading, KHÔNG filtering, KHÔNG timeout, và kết quả rỗng
             else if (!isLoadingData && !viewModel.isFiltering && !loadingTimeoutReached && displayCities.isEmpty()) {
                 Box(
                     modifier = Modifier.fillMaxSize(),
@@ -415,7 +387,7 @@ fun FilteredCitiesScreen(
                         viewModel.weatherDataMap[city.name] == null || 
                         viewModel.weatherDataMap[city.name]?.timeList?.isEmpty() == true
                     }) {
-                // Hiển thị thông báo khi hết thời gian tải dữ liệu
+
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
@@ -484,7 +456,7 @@ fun FilteredCitiesScreen(
                                             fontWeight = FontWeight.Bold,
                                             color = if (isNightTime) Color.White else Color(0xFF5372dc)
                                         )
-                                        // Hiển thị quốc gia nếu có
+
                                         if (!city.country.isNullOrBlank()) {
                                             Text(
                                                 text = city.country,
@@ -501,10 +473,10 @@ fun FilteredCitiesScreen(
                                             onTextLayout = {}
                                         )
                                         
-                                        // Hiển thị các thông số chi tiết
+
                                         Spacer(modifier = Modifier.height(8.dp))
                                         
-                                        // Thêm display của nhiệt độ, độ ẩm và tốc độ gió
+
                                         val tempValue = UnitConverter.convertTemperature(currentTemp.toDouble(), temperatureUnit).toInt()
                                         val tempSymbol = if (temperatureUnit == UnitConverter.TemperatureUnit.CELSIUS) "°C" else "°F"
                                         Text(
@@ -523,7 +495,7 @@ fun FilteredCitiesScreen(
                                             color = if (isNightTime) Color.White.copy(alpha = 0.8f) else Color(0xFF5372dc).copy(alpha = 0.8f)
                                         )
                                         
-                                        // Thêm các thông số khác từ weatherData nếu có
+
                                         weatherData.currentAqi?.let { aqi ->
                                             Text(
                                                 text = "Chỉ số AQI: $aqi (${getAqiDescription(aqi)})",
@@ -541,7 +513,7 @@ fun FilteredCitiesScreen(
                                         }
                                     }
                                     Column(horizontalAlignment = Alignment.End) {
-                                        // Hiển thị icon thời tiết
+
                                         val weatherIcon = WeatherUtils.getWeatherIcon(currentWeatherCode, isNightTime)
                                         
                                         Image(
@@ -552,7 +524,7 @@ fun FilteredCitiesScreen(
                                     }
                                 }
                             } else {
-                                // Hiển thị thông tin đang tải nếu chưa có dữ liệu thời tiết
+
                                 Row(
                                     modifier = Modifier
                                         .fillMaxWidth()
@@ -567,7 +539,7 @@ fun FilteredCitiesScreen(
                                             fontWeight = FontWeight.Bold,
                                             color = if (isNightTime) Color.White else Color(0xFF5372dc)
                                         )
-                                        // Hiển thị quốc gia nếu có
+
                                         if (!city.country.isNullOrBlank()) {
                                             Text(
                                                 text = city.country,
@@ -597,63 +569,63 @@ fun FilteredCitiesScreen(
     }
 }
 
-// Hàm helper để lấy mô tả thời tiết dựa trên mã thời tiết
+
 fun getFilteredWeatherDescription(weatherCode: Int): String {
-    // Log mã thời tiết để debug
+
     Log.d("FilteredCitiesScreen", "Chuyển đổi mã thời tiết: $weatherCode")
     
     return when (weatherCode) {
-        0 -> "Bầu trời quang đãng" // Clear sky
-        1 -> "Chủ yếu quang đãng" // Mainly clear
-        2 -> "Có mây rải rác" // Partly cloudy
-        3 -> "Nhiều mây" // Overcast
-        45 -> "Sương mù" // Fog
-        48 -> "Sương mù giá" // Depositing rime fog
-        51 -> "Mưa phùn nhẹ" // Light drizzle
-        53 -> "Mưa phùn vừa" // Moderate drizzle
-        55 -> "Mưa phùn to" // Dense drizzle
-        56 -> "Mưa phùn giá nhẹ" // Light freezing drizzle
-        57 -> "Mưa phùn giá to" // Dense freezing drizzle
-        61 -> "Mưa nhỏ" // Slight rain
-        63 -> "Mưa vừa" // Moderate rain
-        65 -> "Mưa to" // Heavy rain
-        66 -> "Mưa giá nhẹ" // Light freezing rain
-        67 -> "Mưa giá to" // Heavy freezing rain
-        71 -> "Tuyết rơi nhẹ" // Slight snow fall
-        73 -> "Tuyết rơi vừa" // Moderate snow fall
-        75 -> "Tuyết rơi to" // Heavy snow fall
-        77 -> "Bông tuyết" // Snow grains
-        80 -> "Mưa rào nhẹ" // Slight rain showers
-        81 -> "Mưa rào vừa" // Moderate rain showers
-        82 -> "Mưa rào mạnh" // Violent rain showers
-        85 -> "Mưa tuyết nhẹ" // Slight snow showers
-        86 -> "Mưa tuyết to" // Heavy snow showers
-        95 -> "Dông bão" // Thunderstorm
-        96 -> "Dông bão với mưa đá nhẹ" // Thunderstorm with slight hail
-        99 -> "Dông bão với mưa đá to" // Thunderstorm with heavy hail
-        else -> "Không xác định" // Unknown
+        0 -> "Bầu trời quang đãng"
+        1 -> "Chủ yếu quang đãng"
+        2 -> "Có mây rải rác"
+        3 -> "Nhiều mây"
+        45 -> "Sương mù"
+        48 -> "Sương mù giá"
+        51 -> "Mưa phùn nhẹ"
+        53 -> "Mưa phùn vừa"
+        55 -> "Mưa phùn to"
+        56 -> "Mưa phùn giá nhẹ"
+        57 -> "Mưa phùn giá to"
+        61 -> "Mưa nhỏ"
+        63 -> "Mưa vừa"
+        65 -> "Mưa to"
+        66 -> "Mưa giá nhẹ"
+        67 -> "Mưa giá to"
+        71 -> "Tuyết rơi nhẹ"
+        73 -> "Tuyết rơi vừa"
+        75 -> "Tuyết rơi to"
+        77 -> "Bông tuyết"
+        80 -> "Mưa rào nhẹ"
+        81 -> "Mưa rào vừa"
+        82 -> "Mưa rào mạnh"
+        85 -> "Mưa tuyết nhẹ"
+        86 -> "Mưa tuyết to"
+        95 -> "Dông bão"
+        96 -> "Dông bão với mưa đá nhẹ"
+        99 -> "Dông bão với mưa đá to"
+        else -> "Không xác định"
     }
 }
 
-// Thêm các hàm tiện ích mới
+
 fun getFilteredWeatherIcon(weatherCode: Int): Int {
     return when (weatherCode) {
-        0 -> R.drawable.sunny // Trời quang
-        1 -> R.drawable.cloudy_with_sun // Nắng nhẹ
-        2 -> R.drawable.cloudy_with_sun // Mây rải rác
-        3 -> R.drawable.cloudy // Nhiều mây
-        45, 48 -> R.drawable.cloudy // Sương mù
-        51, 53, 55 -> R.drawable.rainingg // Mưa phùn
-        56, 57 -> R.drawable.rainingg // Mưa phùn đông đá (hiếm)
-        61, 63, 65 -> R.drawable.rainingg // Mưa (nhẹ, vừa, nặng)
-        66, 67 -> R.drawable.rainingg // Mưa đông đá (hiếm)
-        71, 73, 75 -> R.drawable.snow // Tuyết (nhẹ, vừa, nặng)
-        77 -> R.drawable.snow // Hạt tuyết (hiếm)
-        80, 81, 82 -> R.drawable.rainingg // Mưa rào (nhẹ, vừa, dữ dội)
-        85, 86 -> R.drawable.snow // Mưa tuyết (nhẹ, nặng)
-        95 -> R.drawable.thunderstorm // Dông (nhẹ/vừa)
-        96, 99 -> R.drawable.thunderstorm // Dông có mưa đá (nhẹ/nặng)
-        else -> R.drawable.cloudy_with_sun // Mặc định
+        0 -> R.drawable.sunny
+        1 -> R.drawable.cloudy_with_sun
+        2 -> R.drawable.cloudy_with_sun
+        3 -> R.drawable.cloudy
+        45, 48 -> R.drawable.cloudy
+        51, 53, 55 -> R.drawable.rainingg
+        56, 57 -> R.drawable.rainingg
+        61, 63, 65 -> R.drawable.rainingg
+        66, 67 -> R.drawable.rainingg
+        71, 73, 75 -> R.drawable.snow
+        77 -> R.drawable.snow
+        80, 81, 82 -> R.drawable.rainingg
+        85, 86 -> R.drawable.snow
+        95 -> R.drawable.thunderstorm
+        96, 99 -> R.drawable.thunderstorm
+        else -> R.drawable.cloudy_with_sun
     }
 }
 
@@ -678,14 +650,14 @@ fun getUvDescription(uv: Int): String {
     }
 }
 
-// Hàm kiểm tra xem thời tiết có khớp với bộ lọc không
+
 fun doesWeatherMatchFilter(weatherDescription: String, weatherFilter: String, timeString: String = ""): Boolean {
     if (weatherFilter == "Tất cả") return true
     
-    // Log chi tiết cho debug
+
     Log.d("FilteredCitiesScreen", "Kiểm tra lọc thời tiết: '$weatherDescription' với bộ lọc '$weatherFilter'")
     
-    // Trước tiên kiểm tra khớp trực tiếp với từng trạng thái
+
     val directMatch = when (weatherFilter) {
         "Nắng" -> weatherDescription == "Bầu trời quang đãng" || 
                   weatherDescription == "Chủ yếu quang đãng"
@@ -702,24 +674,24 @@ fun doesWeatherMatchFilter(weatherDescription: String, weatherFilter: String, ti
         return true
     }
     
-    // Kiểm tra thời gian trong ngày cho thời tiết "Nắng"
+
     if (weatherFilter == "Nắng" && timeString.isNotEmpty()) {
         try {
-            // Lấy giờ từ chuỗi thời gian ISO (format: "2023-04-20T14:00")
+
             val hourOfDay = timeString.substringAfterLast("T").substringBefore(":").toIntOrNull() ?: -1
             
-            // Nếu là ban đêm (từ 19h đến 6h sáng), không thể có nắng
+
             if (hourOfDay in 0..6 || hourOfDay in 19..23) {
                 Log.d("FilteredCitiesScreen", "Thời điểm $hourOfDay giờ không phù hợp với thời tiết nắng")
                 return false
             }
         } catch (e: Exception) {
-            // Nếu không parse được thời gian, bỏ qua kiểm tra này
+
             Log.e("FilteredCitiesScreen", "Lỗi khi phân tích thời gian '$timeString': ${e.message}")
         }
     }
     
-    // Danh sách từ khóa cho mỗi loại thời tiết
+
     val keywordMap = mapOf(
         "Nắng" to listOf("nắng", "quang đãng", "quang", "nắng nhẹ", "clear", "sunny", "fair"),
         "Nhiều mây" to listOf("mây", "nhiều mây", "rải rác", "cloudy", "clouds", "overcast", "có mây", "chủ yếu quang đãng"),
@@ -731,7 +703,7 @@ fun doesWeatherMatchFilter(weatherDescription: String, weatherFilter: String, ti
     
     val lowerDesc = weatherDescription.lowercase()
     
-    // Kiểm tra các từ khóa tương ứng với loại thời tiết
+
     val keywords = keywordMap[weatherFilter] ?: return false
     val result = keywords.any { keyword -> lowerDesc.contains(keyword.lowercase()) }
     
@@ -739,7 +711,7 @@ fun doesWeatherMatchFilter(weatherDescription: String, weatherFilter: String, ti
     return result
 }
 
-// Hàm kiểm tra trạng thái thời tiết dựa trên mã
+
 fun doesWeatherCodeMatchFilter(weatherCode: Int, weatherFilter: String): Boolean {
     if (weatherFilter == "Tất cả") return true
     
@@ -759,7 +731,7 @@ fun doesWeatherCodeMatchFilter(weatherCode: Int, weatherFilter: String): Boolean
 @Preview(showBackground = true)
 @Composable
 fun FilteredCitiesScreenPreview() {
-    // Mock data for preview
+
     Box(
         modifier = Modifier
             .fillMaxSize()
@@ -774,7 +746,7 @@ fun FilteredCitiesScreenPreview() {
                 .fillMaxSize()
                 .padding(16.dp)
         ) {
-            // Header with back button
+
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -797,7 +769,7 @@ fun FilteredCitiesScreenPreview() {
                 )
             }
             
-            // Sample filtered city card
+
             Card(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -844,251 +816,3 @@ fun FilteredCitiesScreenPreview() {
     }
 }
 
-@Preview(showBackground = true)
-@Composable
-fun FilteredCityCardPreview() {
-    Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(8.dp),
-        colors = CardDefaults.cardColors(
-            containerColor = Color.White.copy(alpha = 0.9f)
-        ),
-        shape = RoundedCornerShape(12.dp)
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Column {
-                Text(
-                    text = "TP. Hồ Chí Minh",
-                    fontSize = 18.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = Color(0xFF5372dc)
-                )
-                Text(
-                    text = "Việt Nam",
-                    fontSize = 14.sp,
-                    color = Color(0xFF5372dc).copy(alpha = 0.8f),
-                    fontStyle = FontStyle.Italic
-                )
-                Text(
-                    text = "28°C • Nhiều mây",
-                    fontSize = 14.sp,
-                    color = Color(0xFF5372dc).copy(alpha = 0.7f)
-                )
-            }
-            Image(
-                painter = painterResource(id = R.drawable.cloudy),
-                contentDescription = "Weather icon",
-                modifier = Modifier.size(40.dp)
-            )
-        }
-    }
-}
-
-// ========== Weather Filter Screen (moved from WeatherMainScreen.kt) ===========
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-fun WeatherFilterScreen(
-    viewModel: WeatherViewModel,
-    onBackClick: () -> Unit,
-    isNightTime: Boolean = remember {
-        val currentHour = java.time.LocalTime.now().hour
-        currentHour < 6 || currentHour >= 18 // Đêm từ 18:00 đến 6:00
-    }
-) {
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(
-                brush = Brush.verticalGradient(
-                    colors = if (isNightTime)
-                        listOf(Color(0xFF1A202C), Color(0xFF1A202C))
-                    else
-                        listOf(Color(0xFFcbdfff), Color(0xFFfcdbf6))
-                )
-            )
-            .padding(16.dp)
-    ) {
-        // Header
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(bottom = 24.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            IconButton(onClick = onBackClick) {
-                Icon(
-                    imageVector = Icons.Default.ArrowBack,
-                    contentDescription = "Quay lại",
-                    tint = if (isNightTime) Color.White else Color(0xFF5372dc)
-                )
-            }
-            Text(
-                text = "Lọc theo điều kiện thời tiết",
-                fontSize = 20.sp,
-                fontWeight = FontWeight.Bold,
-                color = if (isNightTime) Color.White else Color(0xFF5372dc)
-            )
-            Spacer(modifier = Modifier.width(48.dp))
-        }
-
-        // Country search field
-        OutlinedTextField(
-            value = viewModel.selectedFilterCountry,
-            onValueChange = { viewModel.updateFilters(country = it) },
-            placeholder = {
-                Text(
-                    "Nhập tên quốc gia...",
-                    color = if (isNightTime) Color.Gray else Color.Gray
-                )
-            },
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(bottom = 16.dp),
-            colors = OutlinedTextFieldDefaults.colors(
-                focusedBorderColor = if (isNightTime) Color.White else Color(0xFF5372dc),
-                unfocusedBorderColor = if (isNightTime) Color.Gray else Color(0xFF5372dc).copy(alpha = 0.5f),
-                focusedTextColor = if (isNightTime) Color.White else Color.Black,
-                unfocusedTextColor = if (isNightTime) Color.White else Color.Black,
-                cursorColor = if (isNightTime) Color.White else Color(0xFF5372dc)
-            )
-        )
-
-        // Temperature Range
-        Text(
-            text = "Nhiệt độ (-20°C - 50°C)",
-            fontSize = 16.sp,
-            color = if (isNightTime) Color.White else Color(0xFF5372dc),
-            modifier = Modifier.padding(bottom = 8.dp)
-        )
-        RangeSlider(
-            value = viewModel.temperatureFilterRange,
-            onValueChange = { viewModel.updateFilters(temperatureRange = it) },
-            valueRange = -20f..50f,
-            colors = SliderDefaults.colors(
-                thumbColor = if (isNightTime) Color.White else Color(0xFF5372dc),
-                activeTrackColor = if (isNightTime) Color.White else Color(0xFF5372dc),
-                inactiveTrackColor = if (isNightTime) Color.Gray else Color(0xFF5372dc).copy(alpha = 0.3f)
-            )
-        )
-
-        // Wind Speed Range
-        Text(
-            text = "Tốc độ gió (0 - 100 km/h)",
-            fontSize = 16.sp,
-            color = if (isNightTime) Color.White else Color(0xFF5372dc),
-            modifier = Modifier.padding(top = 16.dp, bottom = 8.dp)
-        )
-        RangeSlider(
-            value = viewModel.windSpeedFilterRange,
-            onValueChange = { viewModel.updateFilters(windSpeedRange = it) },
-            valueRange = 0f..100f,
-            colors = SliderDefaults.colors(
-                thumbColor = if (isNightTime) Color.White else Color(0xFF5372dc),
-                activeTrackColor = if (isNightTime) Color.White else Color(0xFF5372dc),
-                inactiveTrackColor = if (isNightTime) Color.Gray else Color(0xFF5372dc).copy(alpha = 0.3f)
-            )
-        )
-
-        // Humidity Range
-        Text(
-            text = "Độ ẩm (0% - 100%)",
-            fontSize = 16.sp,
-            color = if (isNightTime) Color.White else Color(0xFF5372dc),
-            modifier = Modifier.padding(top = 16.dp, bottom = 8.dp)
-        )
-        RangeSlider(
-            value = viewModel.humidityFilterRange,
-            onValueChange = { viewModel.updateFilters(humidityRange = it) },
-            valueRange = 0f..100f,
-            colors = SliderDefaults.colors(
-                thumbColor = if (isNightTime) Color.White else Color(0xFF5372dc),
-                activeTrackColor = if (isNightTime) Color.White else Color(0xFF5372dc),
-                inactiveTrackColor = if (isNightTime) Color.Gray else Color(0xFF5372dc).copy(alpha = 0.3f)
-            )
-        )
-
-        // Weather State Dropdown
-        Text(
-            text = "Trạng thái thời tiết",
-            fontSize = 16.sp,
-            color = if (isNightTime) Color.White else Color(0xFF5372dc),
-            modifier = Modifier.padding(top = 16.dp, bottom = 8.dp)
-        )
-        var expanded by remember { mutableStateOf(false) }
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(bottom = 24.dp)
-        ) {
-            OutlinedButton(
-                onClick = { expanded = true },
-                modifier = Modifier.fillMaxWidth(),
-                colors = ButtonDefaults.outlinedButtonColors(
-                    containerColor = if (isNightTime) Color(0xFF2D3748) else Color.White,
-                    contentColor = if (isNightTime) Color.White else Color(0xFF5372dc)
-                ),
-                border = BorderStroke(
-                    1.dp,
-                    if (isNightTime) Color.Gray else Color(0xFF5372dc).copy(alpha = 0.5f)
-                )
-            ) {
-                Text(
-                    text = viewModel.weatherStateFilter,
-                    color = if (isNightTime) Color.White else Color(0xFF5372dc),
-                    style = MaterialTheme.typography.bodyLarge.copy(
-                        color = if (isNightTime) Color.White else Color(0xFF5372dc)
-                    )
-                )
-            }
-            DropdownMenu(
-                expanded = expanded,
-                onDismissRequest = { expanded = false },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .background(if (isNightTime) Color(0xFF2D3748) else Color.White)
-            ) {
-                listOf("Tất cả", "Nắng", "Nhiều mây", "Mưa", "Sương mù", "Tuyết").forEach { state ->
-                    DropdownMenuItem(
-                        text = {
-                            Text(
-                                text = state,
-                                color = if (isNightTime) Color.White else Color(0xFF5372dc)
-                            )
-                        },
-                        onClick = {
-                            viewModel.updateFilters(weatherState = state)
-                            expanded = false
-                        }
-                    )
-                }
-            }
-        }
-
-        // Apply Filter Button
-        Button(
-            onClick = onBackClick,
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(56.dp),
-            colors = ButtonDefaults.buttonColors(
-                containerColor = if (isNightTime) Color.White else Color(0xFF5372dc),
-                contentColor = if (isNightTime) Color(0xFF2D3748) else Color.White
-            ),
-            shape = RoundedCornerShape(28.dp)
-        ) {
-            Text(
-                text = "Áp dụng bộ lọc",
-                fontSize = 16.sp,
-                fontWeight = FontWeight.Bold
-            )
-        }
-    }
-} 

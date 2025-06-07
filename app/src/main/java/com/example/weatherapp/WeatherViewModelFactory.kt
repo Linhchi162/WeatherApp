@@ -18,7 +18,7 @@ class WeatherViewModelFactory(
     @Suppress("UNCHECKED_CAST")
     override fun <T : ViewModel> create(modelClass: Class<T>): T {
         if (modelClass.isAssignableFrom(WeatherViewModel::class.java)) {
-            // Pass all required services to the ViewModel constructor
+
             return WeatherViewModel(
                 weatherDao,
                 openMeteoService,
